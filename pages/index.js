@@ -202,15 +202,17 @@ function TokenPanel({ token, onRefresh }) {
   );
 }
 
-function PositionsTable({ positions, loading }) {
+function PositionsTable({ positions, loading, isMobile }) {
   if (loading) return <div style={{ textAlign: "center", padding: 32 }}><Spinner /></div>;
   if (!positions?.length) return <p style={{ color: "var(--text3)", fontSize: 13, textAlign: "center", padding: 24 }}>No open positions</p>;
+  const th = mThStyle(isMobile);
+  const td = mTdStyle(isMobile);
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={tableStyle}>
         <thead>
           <tr>{["Symbol","Buy Date","Buy Price","CMP","P&L %","Qty","ATSL","Status"].map(h => (
-            <th key={h} style={thStyle}>{h}</th>
+            <th key={h} style={th}>{h}</th>
           ))}</tr>
         </thead>
         <tbody>
@@ -218,14 +220,14 @@ function PositionsTable({ positions, loading }) {
             const pnl = parseFloat(r.pnlPct);
             return (
               <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text)" }}>{(r["Symbol"] || "").replace(".NS", "")}</td>
-                <td style={{ ...tdStyle, color: "var(--text2)" }}>{r["Buy Date"] || "—"}</td>
-                <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{fmtINR(r["Buy Price"])}</td>
-                <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: "var(--blue)" }}>{r.cmp ? fmtINR(r.cmp) : "—"}</td>
-                <td style={tdStyle}><PnlBadge val={r.pnlPct} /></td>
-                <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{r["Qty"] || "—"}</td>
-                <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: "var(--yellow)" }}>{fmtINR(r["ATSL"] || r["Stop Loss"])}</td>
-                <td style={tdStyle}><Badge type={!isNaN(pnl) && pnl >= 0 ? "green" : "red"}>{!isNaN(pnl) && pnl >= 0 ? "PROFIT" : "LOSS"}</Badge></td>
+                <td style={{ ...td, fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text)" }}>{(r["Symbol"] || "").replace(".NS", "")}</td>
+                <td style={{ ...td, color: "var(--text2)" }}>{r["Buy Date"] || "—"}</td>
+                <td style={{ ...td, fontFamily: "var(--font-mono)" }}>{fmtINR(r["Buy Price"])}</td>
+                <td style={{ ...td, fontFamily: "var(--font-mono)", color: "var(--blue)" }}>{r.cmp ? fmtINR(r.cmp) : "—"}</td>
+                <td style={td}><PnlBadge val={r.pnlPct} /></td>
+                <td style={{ ...td, fontFamily: "var(--font-mono)" }}>{r["Qty"] || "—"}</td>
+                <td style={{ ...td, fontFamily: "var(--font-mono)", color: "var(--yellow)" }}>{fmtINR(r["ATSL"] || r["Stop Loss"])}</td>
+                <td style={td}><Badge type={!isNaN(pnl) && pnl >= 0 ? "green" : "red"}>{!isNaN(pnl) && pnl >= 0 ? "PROFIT" : "LOSS"}</Badge></td>
               </tr>
             );
           })}
@@ -262,7 +264,7 @@ function SignalsLog({ signals, loading, type }) {
   );
 }
 
-function TradeHistory({ trades, loading }) {
+function TradeHistory({ trades, loading, isMobile }) {
   if (loading) return <div style={{ textAlign: "center", padding: 32 }}><Spinner /></div>;
   if (!trades?.length) return <p style={{ color: "var(--text3)", fontSize: 13, textAlign: "center", padding: 24 }}>No trade history</p>;
 
@@ -276,6 +278,9 @@ function TradeHistory({ trades, loading }) {
     cumPnl += pnl;
     return { date: t["Sell Date"] || t["Buy Date"] || "—", pnl: parseFloat(cumPnl.toFixed(0)) };
   });
+
+  const th = mThStyle(isMobile);
+  const td = mTdStyle(isMobile);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -303,7 +308,7 @@ function TradeHistory({ trades, loading }) {
         <table style={tableStyle}>
           <thead>
             <tr>{["Symbol","Buy Date","Buy Price","Sell Date","Sell Price","P&L %","Reason"].map(h => (
-              <th key={h} style={thStyle}>{h}</th>
+              <th key={h} style={th}>{h}</th>
             ))}</tr>
           </thead>
           <tbody>
@@ -313,13 +318,13 @@ function TradeHistory({ trades, loading }) {
               const pnlPct = b && s ? ((s - b) / b * 100).toFixed(2) : null;
               return (
                 <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontWeight: 600 }}>{(r["Symbol"] || "").replace(".NS", "")}</td>
-                  <td style={{ ...tdStyle, color: "var(--text2)" }}>{r["Buy Date"] || "—"}</td>
-                  <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{fmtINR(r["Buy Price"])}</td>
-                  <td style={{ ...tdStyle, color: "var(--text2)" }}>{r["Sell Date"] || "—"}</td>
-                  <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{fmtINR(r["Sell Price"])}</td>
-                  <td style={tdStyle}><PnlBadge val={pnlPct} /></td>
-                  <td style={{ ...tdStyle, color: "var(--text3)", fontSize: 11 }}>{r["Sell Reason"] || "—"}</td>
+                  <td style={{ ...td, fontFamily: "var(--font-mono)", fontWeight: 600 }}>{(r["Symbol"] || "").replace(".NS", "")}</td>
+                  <td style={{ ...td, color: "var(--text2)" }}>{r["Buy Date"] || "—"}</td>
+                  <td style={{ ...td, fontFamily: "var(--font-mono)" }}>{fmtINR(r["Buy Price"])}</td>
+                  <td style={{ ...td, color: "var(--text2)" }}>{r["Sell Date"] || "—"}</td>
+                  <td style={{ ...td, fontFamily: "var(--font-mono)" }}>{fmtINR(r["Sell Price"])}</td>
+                  <td style={td}><PnlBadge val={pnlPct} /></td>
+                  <td style={{ ...td, color: "var(--text3)", fontSize: 11 }}>{r["Sell Reason"] || "—"}</td>
                 </tr>
               );
             })}
@@ -526,7 +531,7 @@ function PnLCalendar({ trades }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Summary stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12 }}>
         {[
           { label: "Month P&L", value: `${totalPnL >= 0 ? "+" : ""}₹${Math.abs(totalPnL).toLocaleString("en-IN")}`, color: totalPnL >= 0 ? "var(--green)" : "var(--red)" },
           { label: "Win Days", value: winDays, color: "var(--green)" },
@@ -613,6 +618,9 @@ function PnLCalendar({ trades }) {
 const tableStyle = { width: "100%", borderCollapse: "collapse", fontSize: 12 };
 const thStyle = { textAlign: "left", padding: "8px 12px", color: "var(--text3)", fontWeight: 600, fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" };
 const tdStyle  = { padding: "8px 12px", color: "var(--text)", whiteSpace: "nowrap" };
+// Mobile-aware style helpers (takes isMobile param)
+const mThStyle = (isMobile) => ({ ...thStyle, fontSize: isMobile ? 10 : 11, padding: isMobile ? "6px 8px" : "8px 12px" });
+const mTdStyle = (isMobile) => ({ ...tdStyle, fontSize: isMobile ? 11 : 13, padding: isMobile ? "6px 8px" : "8px 12px" });
 const inputStyle = {
   flex: 1, background: "var(--bg3)", border: "1px solid var(--border2)", borderRadius: 6,
   color: "var(--text)", padding: "8px 12px", fontSize: 13, fontFamily: "var(--font-mono)",
@@ -658,6 +666,15 @@ export default function Dashboard() {
   const [istTime, setIstTime] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [authMsg, setAuthMsg] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Mobile detection
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const setLoad = (key, val) => setLoading((l) => ({ ...l, [key]: val }));
 
@@ -917,21 +934,23 @@ export default function Dashboard() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 18 }}>📈</span>
           <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "0.01em" }}>ATSL Trading</span>
-          <span style={{ color: "var(--text3)", fontSize: 12 }}>Dashboard</span>
+          {!isMobile && <span style={{ color: "var(--text3)", fontSize: 12 }}>Dashboard</span>}
         </div>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: isMobile ? 8 : 14 }}>
           {/* Market status */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <StatusDot ok={marketOpen} />
-            <span style={{ fontSize: 12, color: marketOpen ? "var(--green)" : "var(--text3)" }}>
-              {marketOpen ? "Market Open" : "Market Closed"}
-            </span>
+            {!isMobile && (
+              <span style={{ fontSize: 12, color: marketOpen ? "var(--green)" : "var(--text3)" }}>
+                {marketOpen ? "Market Open" : "Market Closed"}
+              </span>
+            )}
           </div>
 
-          {/* Zerodha wallet balance */}
+          {/* Zerodha wallet balance — hidden on mobile */}
           {wallet.zerodha && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 10px", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 6 }}>
+            <div style={{ display: isMobile ? "none" : "flex", alignItems: "center", gap: 10, padding: "4px 10px", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 6 }}>
               <span style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Zerodha</span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--green)" }}>
                 ₹{wallet.zerodha.availableCash.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
@@ -947,8 +966,8 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* IST clock */}
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text2)" }}>{istTime} IST</span>
+          {/* IST clock — hidden on mobile */}
+          <span style={{ display: isMobile ? "none" : "inline", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text2)" }}>{istTime} IST</span>
 
           {/* Refresh */}
           <button onClick={handleRefresh} disabled={refreshing} style={{ ...btnStyle("default"), padding: "5px 10px", fontSize: 12 }}>
@@ -971,50 +990,78 @@ export default function Dashboard() {
       )}
 
       <div style={{ display: "flex", flex: 1 }}>
-        {/* Sidebar */}
-        <nav style={{
-          width: 200, background: "var(--bg1)", borderRight: "1px solid var(--border)",
-          padding: "16px 10px", display: "flex", flexDirection: "column", gap: 4,
-          position: "sticky", top: 52, height: "calc(100vh - 52px)", overflowY: "auto",
-        }}>
-          {TABS.map((t) => (
-            <button key={t} onClick={() => setTab(t)} style={{
-              background: tab === t ? "rgba(0,229,153,.08)" : "transparent",
-              color: tab === t ? "var(--green)" : "var(--text2)",
-              border: tab === t ? "1px solid rgba(0,229,153,.2)" : "1px solid transparent",
-              borderRadius: 7, padding: "9px 12px", cursor: "pointer", textAlign: "left",
-              fontSize: 13, fontWeight: tab === t ? 600 : 400, transition: "all 0.15s",
-              display: "flex", alignItems: "center", gap: 8,
-            }}>
-              {t === "Positions" && "📂"}
-              {t === "ATSL Tracker" && "🎯"}
-              {t === "P&L" && "💰"}
-              {t === "Signals" && "⚡"}
-              {t === "History" && "📜"}
-              {t === "Lab" && "🧪"}
-              {t === "Orders" && "📋"}
-              {t === "Engine" && "⚙️"}
-              {t === "Crons" && "⏱"}
-              {t === "Telegram" && "📨"}
-              {t}
-            </button>
-          ))}
+        {/* Sidebar — desktop only */}
+        {!isMobile && (
+          <nav style={{
+            width: 200, background: "var(--bg1)", borderRight: "1px solid var(--border)",
+            padding: "16px 10px", display: "flex", flexDirection: "column", gap: 4,
+            position: "sticky", top: 52, height: "calc(100vh - 52px)", overflowY: "auto",
+          }}>
+            {TABS.map((t) => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                background: tab === t ? "rgba(0,229,153,.08)" : "transparent",
+                color: tab === t ? "var(--green)" : "var(--text2)",
+                border: tab === t ? "1px solid rgba(0,229,153,.2)" : "1px solid transparent",
+                borderRadius: 7, padding: "9px 12px", cursor: "pointer", textAlign: "left",
+                fontSize: 13, fontWeight: tab === t ? 600 : 400, transition: "all 0.15s",
+                display: "flex", alignItems: "center", gap: 8,
+              }}>
+                {t === "Positions" && "📂"}
+                {t === "ATSL Tracker" && "🎯"}
+                {t === "P&L" && "💰"}
+                {t === "Signals" && "⚡"}
+                {t === "History" && "📜"}
+                {t === "Lab" && "🧪"}
+                {t === "Orders" && "📋"}
+                {t === "Engine" && "⚙️"}
+                {t === "Crons" && "⏱"}
+                {t === "Telegram" && "📨"}
+                {t}
+              </button>
+            ))}
 
-          {/* Token status in sidebar */}
-          <div style={{ marginTop: "auto", padding: "12px 8px", borderTop: "1px solid var(--border)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-              <StatusDot ok={token?.valid} />
-              <span style={{ fontSize: 11, color: "var(--text3)" }}>Kite Token</span>
+            {/* Token status in sidebar */}
+            <div style={{ marginTop: "auto", padding: "12px 8px", borderTop: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <StatusDot ok={token?.valid} />
+                <span style={{ fontSize: 11, color: "var(--text3)" }}>Kite Token</span>
+              </div>
+              {token?.valid
+                ? <span style={{ fontSize: 11, color: "var(--green)", fontFamily: "var(--font-mono)" }}>{token.user_id}</span>
+                : <button onClick={() => setTab("Positions")} style={{ fontSize: 11, color: "var(--red)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Login required</button>
+              }
             </div>
-            {token?.valid
-              ? <span style={{ fontSize: 11, color: "var(--green)", fontFamily: "var(--font-mono)" }}>{token.user_id}</span>
-              : <button onClick={() => setTab("Positions")} style={{ fontSize: 11, color: "var(--red)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Login required</button>
-            }
-          </div>
-        </nav>
+          </nav>
+        )}
+
+        {/* Bottom nav bar — mobile only */}
+        {isMobile && (
+          <nav style={{
+            position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200,
+            background: "var(--bg1)", borderTop: "1px solid var(--border)",
+            display: "flex", overflowX: "auto", padding: "4px 0",
+          }}>
+            {TABS.map(t => {
+              const icons = { "Positions": "📂", "ATSL Tracker": "🎯", "P&L": "💰", "Signals": "⚡", "History": "📜", "Lab": "🧪", "Orders": "📋", "Engine": "⚙️", "Crons": "⏱", "Telegram": "📨" };
+              return (
+                <button key={t} onClick={() => setTab(t)} style={{
+                  flex: "0 0 auto", padding: "6px 14px", background: "none",
+                  border: "none", cursor: "pointer", fontSize: 10,
+                  color: tab === t ? "var(--green)" : "var(--text3)",
+                  fontWeight: tab === t ? 700 : 400,
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                  borderBottom: tab === t ? "2px solid var(--green)" : "2px solid transparent",
+                }}>
+                  <span style={{ fontSize: 16 }}>{icons[t]}</span>
+                  <span>{t}</span>
+                </button>
+              );
+            })}
+          </nav>
+        )}
 
         {/* Main content */}
-        <main style={{ flex: 1, padding: 20, overflowY: "auto", maxWidth: "100%" }}>
+        <main style={{ flex: 1, padding: isMobile ? "12px 10px" : 20, paddingBottom: isMobile ? 80 : 20, overflowY: "auto", maxWidth: "100%" }}>
 
           {/* ── POSITIONS ── */}
           {tab === "Positions" && (
@@ -1070,25 +1117,25 @@ export default function Dashboard() {
                   <div style={{ overflowX: "auto" }}>
                     <table style={tableStyle}>
                       <thead>
-                        <tr>{["Symbol","Qty","T+1","Avg Price","LTP","Invested","Current","P&L","P&L %","Day Chg %"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
+                        <tr>{["Symbol","Qty","T+1","Avg Price","LTP","Invested","Current","P&L","P&L %","Day Chg %"].map(h => <th key={h} style={mThStyle(isMobile)}>{h}</th>)}</tr>
                       </thead>
                       <tbody>
                         {zerodhaPortfolio.holdings.map((h, i) => (
                           <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontWeight: 700 }}>{h.symbol}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{h.qty}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: h.t1Qty > 0 ? "var(--yellow)" : "var(--text3)" }}>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 700 }}>{h.symbol}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>{h.qty}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: h.t1Qty > 0 ? "var(--yellow)" : "var(--text3)" }}>
                               {h.t1Qty > 0 ? h.t1Qty : "—"}
                             </td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>₹{fmt(h.avgPrice)}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontWeight: 600 }}>₹{fmt(h.lastPrice)}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: "var(--text2)" }}>₹{Math.round(h.invested).toLocaleString("en-IN")}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>₹{Math.round(h.currentVal).toLocaleString("en-IN")}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: h.pnlVal >= 0 ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>₹{fmt(h.avgPrice)}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 600 }}>₹{fmt(h.lastPrice)}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: "var(--text2)" }}>₹{Math.round(h.invested).toLocaleString("en-IN")}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>₹{Math.round(h.currentVal).toLocaleString("en-IN")}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: h.pnlVal >= 0 ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
                               {h.pnlVal >= 0 ? "+" : ""}₹{Math.round(Math.abs(h.pnlVal)).toLocaleString("en-IN")}
                             </td>
-                            <td style={tdStyle}><PnlBadge val={h.pnlPct} /></td>
-                            <td style={tdStyle}><PnlBadge val={h.dayChangePct} /></td>
+                            <td style={mTdStyle(isMobile)}><PnlBadge val={h.pnlPct} /></td>
+                            <td style={mTdStyle(isMobile)}><PnlBadge val={h.dayChangePct} /></td>
                           </tr>
                         ))}
                       </tbody>
@@ -1103,20 +1150,20 @@ export default function Dashboard() {
                   <div style={{ overflowX: "auto" }}>
                     <table style={tableStyle}>
                       <thead>
-                        <tr>{["Symbol","Product","Qty","Avg Price","LTP","P&L","P&L %"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
+                        <tr>{["Symbol","Product","Qty","Avg Price","LTP","P&L","P&L %"].map(h => <th key={h} style={mThStyle(isMobile)}>{h}</th>)}</tr>
                       </thead>
                       <tbody>
                         {zerodhaPortfolio.netPositions.map((p, i) => (
                           <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontWeight: 700 }}>{p.symbol}</td>
-                            <td style={tdStyle}><Badge type={p.product === "CNC" ? "blue" : "yellow"}>{p.product}</Badge></td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: p.qty > 0 ? "var(--green)" : "var(--red)" }}>{p.qty > 0 ? "+" : ""}{p.qty}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>₹{fmt(p.avgPrice)}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontWeight: 600 }}>₹{fmt(p.lastPrice)}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: p.pnlVal >= 0 ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 700 }}>{p.symbol}</td>
+                            <td style={mTdStyle(isMobile)}><Badge type={p.product === "CNC" ? "blue" : "yellow"}>{p.product}</Badge></td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: p.qty > 0 ? "var(--green)" : "var(--red)" }}>{p.qty > 0 ? "+" : ""}{p.qty}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>₹{fmt(p.avgPrice)}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 600 }}>₹{fmt(p.lastPrice)}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: p.pnlVal >= 0 ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
                               {p.pnlVal >= 0 ? "+" : ""}₹{Math.round(Math.abs(p.pnlVal)).toLocaleString("en-IN")}
                             </td>
-                            <td style={tdStyle}><PnlBadge val={p.pnlPct} /></td>
+                            <td style={mTdStyle(isMobile)}><PnlBadge val={p.pnlPct} /></td>
                           </tr>
                         ))}
                       </tbody>
@@ -1132,7 +1179,7 @@ export default function Dashboard() {
                     {loading.positions ? <Spinner /> : "↻"}
                   </button>
                 }>
-                  <PositionsTable positions={positions} loading={loading.positions} />
+                  <PositionsTable positions={positions} loading={loading.positions} isMobile={isMobile} />
                 </Card>
               )}
 
@@ -1142,7 +1189,7 @@ export default function Dashboard() {
                   <div style={{ overflowX: "auto" }}>
                     <table style={tableStyle}>
                       <thead>
-                        <tr>{["Symbol","Buy Date","Buy Price","Sell Date","Sell Price","P&L %","Reason"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
+                        <tr>{["Symbol","Buy Date","Buy Price","Sell Date","Sell Price","P&L %","Reason"].map(h => <th key={h} style={mThStyle(isMobile)}>{h}</th>)}</tr>
                       </thead>
                       <tbody>
                         {soldPositions.slice(0, 20).map((r, i) => {
@@ -1150,13 +1197,13 @@ export default function Dashboard() {
                           const pnl = b && s ? ((s - b) / b * 100).toFixed(2) : null;
                           return (
                             <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                              <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontWeight: 600 }}>{(r["Symbol"] || "").replace(".NS", "")}</td>
-                              <td style={{ ...tdStyle, color: "var(--text2)" }}>{r["Buy Date"] || "—"}</td>
-                              <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{fmtINR(r["Buy Price"])}</td>
-                              <td style={{ ...tdStyle, color: "var(--text2)" }}>{r["Sell Date"] || "—"}</td>
-                              <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{fmtINR(r["Sell Price"])}</td>
-                              <td style={tdStyle}><PnlBadge val={pnl} /></td>
-                              <td style={{ ...tdStyle, color: "var(--text3)", fontSize: 11 }}>{r["Sell Reason"] || "—"}</td>
+                              <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 600 }}>{(r["Symbol"] || "").replace(".NS", "")}</td>
+                              <td style={{ ...mTdStyle(isMobile), color: "var(--text2)" }}>{r["Buy Date"] || "—"}</td>
+                              <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>{fmtINR(r["Buy Price"])}</td>
+                              <td style={{ ...mTdStyle(isMobile), color: "var(--text2)" }}>{r["Sell Date"] || "—"}</td>
+                              <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>{fmtINR(r["Sell Price"])}</td>
+                              <td style={mTdStyle(isMobile)}><PnlBadge val={pnl} /></td>
+                              <td style={{ ...mTdStyle(isMobile), color: "var(--text3)", fontSize: 11 }}>{r["Sell Reason"] || "—"}</td>
                             </tr>
                           );
                         })}
@@ -1172,7 +1219,7 @@ export default function Dashboard() {
           {/* ── ATSL TRACKER ── */}
           {tab === "ATSL Tracker" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16, animation: "fadeIn 0.25s ease" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 12 }}>
                 {[
                   { label: "Open Positions", value: positions.length, color: "var(--blue)" },
                   { label: "At Risk (near ATSL)", value: positions.filter(p => {
@@ -1211,7 +1258,7 @@ export default function Dashboard() {
           {/* ── SIGNALS ── */}
           {tab === "Signals" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16, animation: "fadeIn 0.25s ease" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
                 <Card title="Buy Signals" action={
                   <Badge type="green">{buySignals.length} signals</Badge>
                 }>
@@ -1232,7 +1279,7 @@ export default function Dashboard() {
               <Card title="Trade History" action={
                 <span style={{ fontSize: 12, color: "var(--text3)" }}>{trades.length} trades</span>
               }>
-                <TradeHistory trades={trades} loading={loading.trades} />
+                <TradeHistory trades={trades} loading={loading.trades} isMobile={isMobile} />
               </Card>
             </div>
           )}
@@ -1290,7 +1337,7 @@ export default function Dashboard() {
 
                         {/* Metrics grid */}
                         <div style={{ padding: 16 }}>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
                             {[
                               { label: "Total P&L", value: m.totalPnL != null ? `${m.pnlPct >= 0 ? "+" : ""}${m.pnlPct}%` : "—", color: pnlColor },
                               { label: "Win Rate", value: m.winRate != null ? `${m.winRate}%` : "—", color: "var(--text)" },
@@ -1451,23 +1498,23 @@ export default function Dashboard() {
                               <div style={{ overflowX: "auto" }}>
                                 <table style={{ ...tableStyle, fontSize: 11 }}>
                                   <thead>
-                                    <tr>{["Symbol","Buy","Sell","P&L%","Reason"].map(h => <th key={h} style={{ ...thStyle, padding: "4px 6px" }}>{h}</th>)}</tr>
+                                    <tr>{["Symbol","Buy","Sell","P&L%","Reason"].map(h => <th key={h} style={{ ...mThStyle(isMobile), padding: isMobile ? "3px 5px" : "4px 6px" }}>{h}</th>)}</tr>
                                   </thead>
                                   <tbody>
                                     {(labTrades[s.id].trades || []).slice(-5).reverse().map((t, i) => {
                                       const pnl = parseFloat(t["P&L %"] || 0);
                                       return (
                                         <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                                          <td style={{ ...tdStyle, padding: "3px 6px", fontFamily: "var(--font-mono)", fontWeight: 600 }}>{(t["Symbol"] || "").replace(".NS","")}</td>
-                                          <td style={{ ...tdStyle, padding: "3px 6px" }}>{t["Buy Price"] ? `₹${t["Buy Price"]}` : "—"}</td>
-                                          <td style={{ ...tdStyle, padding: "3px 6px" }}>{t["Sell Price"] ? `₹${t["Sell Price"]}` : "—"}</td>
-                                          <td style={{ ...tdStyle, padding: "3px 6px" }}><PnlBadge val={pnl} /></td>
-                                          <td style={{ ...tdStyle, padding: "3px 6px", color: "var(--text3)", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t["Sell Reason"] || "—"}</td>
+                                          <td style={{ ...mTdStyle(isMobile), padding: isMobile ? "3px 5px" : "3px 6px", fontFamily: "var(--font-mono)", fontWeight: 600 }}>{(t["Symbol"] || "").replace(".NS","")}</td>
+                                          <td style={{ ...mTdStyle(isMobile), padding: isMobile ? "3px 5px" : "3px 6px" }}>{t["Buy Price"] ? `₹${t["Buy Price"]}` : "—"}</td>
+                                          <td style={{ ...mTdStyle(isMobile), padding: isMobile ? "3px 5px" : "3px 6px" }}>{t["Sell Price"] ? `₹${t["Sell Price"]}` : "—"}</td>
+                                          <td style={{ ...mTdStyle(isMobile), padding: isMobile ? "3px 5px" : "3px 6px" }}><PnlBadge val={pnl} /></td>
+                                          <td style={{ ...mTdStyle(isMobile), padding: isMobile ? "3px 5px" : "3px 6px", color: "var(--text3)", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t["Sell Reason"] || "—"}</td>
                                         </tr>
                                       );
                                     })}
                                     {(labTrades[s.id].trades || []).length === 0 && (
-                                      <tr><td colSpan={5} style={{ ...tdStyle, textAlign: "center", color: "var(--text3)", padding: 8 }}>No closed trades yet</td></tr>
+                                      <tr><td colSpan={5} style={{ ...mTdStyle(isMobile), textAlign: "center", color: "var(--text3)", padding: 8 }}>No closed trades yet</td></tr>
                                     )}
                                   </tbody>
                                 </table>
@@ -1555,31 +1602,31 @@ export default function Dashboard() {
                 <div style={{ overflowX: "auto" }}>
                   <table style={tableStyle}>
                     <thead>
-                      <tr>{["Time","Symbol","Side","Type","Product","Qty","Filled","Avg Price","Status","Order ID"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
+                      <tr>{["Time","Symbol","Side","Type","Product","Qty","Filled","Avg Price","Status","Order ID"].map(h => <th key={h} style={mThStyle(isMobile)}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {kiteOrders.map((o, i) => {
                         const statusType = o.status === "COMPLETE" ? "green" : o.status === "REJECTED" || o.status === "CANCELLED" ? "red" : "yellow";
                         return (
                           <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                            <td style={{ ...tdStyle, color: "var(--text3)", fontSize: 11 }}>{o.placedAt ? new Date(o.placedAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontWeight: 600 }}>{o.symbol}</td>
-                            <td style={tdStyle}><Badge type={o.side === "BUY" ? "green" : "red"}>{o.side}</Badge></td>
-                            <td style={{ ...tdStyle, color: "var(--text2)", fontSize: 11 }}>{o.orderType}</td>
-                            <td style={{ ...tdStyle, color: "var(--text3)", fontSize: 11 }}>{o.product}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{o.qty}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: o.filledQty === o.qty ? "var(--green)" : "var(--text2)" }}>{o.filledQty}</td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{o.avgPrice ? `₹${o.avgPrice}` : "—"}</td>
-                            <td style={tdStyle}>
+                            <td style={{ ...mTdStyle(isMobile), color: "var(--text3)" }}>{o.placedAt ? new Date(o.placedAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 600 }}>{o.symbol}</td>
+                            <td style={mTdStyle(isMobile)}><Badge type={o.side === "BUY" ? "green" : "red"}>{o.side}</Badge></td>
+                            <td style={{ ...mTdStyle(isMobile), color: "var(--text2)" }}>{o.orderType}</td>
+                            <td style={{ ...mTdStyle(isMobile), color: "var(--text3)" }}>{o.product}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>{o.qty}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: o.filledQty === o.qty ? "var(--green)" : "var(--text2)" }}>{o.filledQty}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>{o.avgPrice ? `₹${o.avgPrice}` : "—"}</td>
+                            <td style={mTdStyle(isMobile)}>
                               <Badge type={statusType}>{o.status}</Badge>
                               {o.statusMessage && <div style={{ fontSize: 10, color: "var(--red)", marginTop: 2 }}>{o.statusMessage}</div>}
                             </td>
-                            <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text3)" }}>{o.orderId}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text3)" }}>{o.orderId}</td>
                           </tr>
                         );
                       })}
                       {kiteOrders.length === 0 && (
-                        <tr><td colSpan={10} style={{ ...tdStyle, textAlign: "center", color: "var(--text3)", padding: 20 }}>
+                        <tr><td colSpan={10} style={{ ...mTdStyle(isMobile), textAlign: "center", color: "var(--text3)", padding: 20 }}>
                           {loading.kiteOrders ? <Spinner /> : "No live orders today — or login required"}
                         </td></tr>
                       )}
@@ -1600,24 +1647,24 @@ export default function Dashboard() {
                 <div style={{ overflowX: "auto" }}>
                   <table style={tableStyle}>
                     <thead>
-                      <tr>{["Time","Symbol","Side","Type","Qty","Price","Status","Strategy","Order ID"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
+                      <tr>{["Time","Symbol","Side","Type","Qty","Price","Status","Strategy","Order ID"].map(h => <th key={h} style={mThStyle(isMobile)}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {orders.map((o, i) => (
                         <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                          <td style={{ ...tdStyle, color: "var(--text3)", fontSize: 11 }}>{o.ts ? new Date(o.ts).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-                          <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontWeight: 600 }}>{o.symbol || "—"}</td>
-                          <td style={tdStyle}><Badge type={o.side === "BUY" ? "green" : "red"}>{o.side}</Badge></td>
-                          <td style={{ ...tdStyle, color: "var(--text2)", fontSize: 11 }}>{o.type || "—"}</td>
-                          <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{o.qty || "—"}</td>
-                          <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{o.limitPrice ? `₹${o.limitPrice}` : "MKT"}</td>
-                          <td style={tdStyle}><Badge type={o.status === "PLACED" ? "green" : o.status === "FAILED" ? "red" : "default"}>{o.status || "—"}</Badge></td>
-                          <td style={{ ...tdStyle, fontSize: 11, color: "var(--text3)" }}>{o.strategyId || "—"}</td>
-                          <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text3)" }}>{o.orderId || "—"}</td>
+                          <td style={{ ...mTdStyle(isMobile), color: "var(--text3)" }}>{o.ts ? new Date(o.ts).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                          <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 600 }}>{o.symbol || "—"}</td>
+                          <td style={mTdStyle(isMobile)}><Badge type={o.side === "BUY" ? "green" : "red"}>{o.side}</Badge></td>
+                          <td style={{ ...mTdStyle(isMobile), color: "var(--text2)" }}>{o.type || "—"}</td>
+                          <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>{o.qty || "—"}</td>
+                          <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>{o.limitPrice ? `₹${o.limitPrice}` : "MKT"}</td>
+                          <td style={mTdStyle(isMobile)}><Badge type={o.status === "PLACED" ? "green" : o.status === "FAILED" ? "red" : "default"}>{o.status || "—"}</Badge></td>
+                          <td style={{ ...mTdStyle(isMobile), color: "var(--text3)" }}>{o.strategyId || "—"}</td>
+                          <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text3)" }}>{o.orderId || "—"}</td>
                         </tr>
                       ))}
                       {orders.length === 0 && (
-                        <tr><td colSpan={9} style={{ ...tdStyle, textAlign: "center", color: "var(--text3)", padding: 20 }}>No logged orders today</td></tr>
+                        <tr><td colSpan={9} style={{ ...mTdStyle(isMobile), textAlign: "center", color: "var(--text3)", padding: 20 }}>No logged orders today</td></tr>
                       )}
                     </tbody>
                   </table>
