@@ -498,26 +498,13 @@ function PnLCalendar({ trades }) {
     const dateStr = String(sellDate).split("T")[0].split(" ")[0];
     const bp = parseFloat(t["Buy Price"] || t.buyPrice || 0);
     const sp = parseFloat(t["Sell Price"] || t.sellPrice || 0);
+    const qty = parseFloat(t["Quantity"] || t["Qty"] || t.qty || 1);
     if (!bp || !sp) return;
-    const pnl = sp - bp;
+    const pnl = (sp - bp) * qty;
     dailyPnL[dateStr] = (dailyPnL[dateStr] || 0) + pnl;
   });
 
-  // Demo data if no real trades
-  const hasRealData = Object.keys(dailyPnL).length > 0;
-  const demoDays = {};
-  if (!hasRealData) {
-    const now = new Date();
-    for (let i = 1; i <= 28; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth(), i);
-      if (d.getDay() > 0 && d.getDay() < 6) {
-        const pnl = Math.floor((Math.random() - 0.4) * 8000);
-        const key = d.toISOString().split("T")[0];
-        demoDays[key] = pnl;
-      }
-    }
-  }
-  const pnlData = hasRealData ? dailyPnL : demoDays;
+  const pnlData = dailyPnL;
 
   const { month, year } = viewDate;
   const firstDay = new Date(year, month, 1).getDay();
