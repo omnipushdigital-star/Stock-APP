@@ -641,7 +641,7 @@ const btnStyle = (type) => ({
 });
 
 // ─── Main Dashboard ──────────────────────────────────────────
-const TABS = ["Positions", "ATSL Tracker", "P&L", "Signals", "History", "Lab", "Orders", "Crons", "Telegram"];
+const TABS = ["Positions", "ATSL Tracker", "P&L", "Signals", "History", "Lab", "Orders", "Engine", "Crons", "Telegram"];
 
 export default function Dashboard() {
   const [tab, setTab] = useState("Positions");
@@ -659,6 +659,10 @@ export default function Dashboard() {
   const [kiteOrders, setKiteOrders] = useState([]);
   const [wallet, setWallet] = useState({ zerodha: null, paper: {} });
   const [zerodhaPortfolio, setZerodhaPortfolio] = useState({ holdings: [], netPositions: [], summary: null, error: null });
+  const [engineStatus, setEngineStatus] = useState({ marketOpen: false, tradingDay: false, jobs: [] });
+  const [engineLog, setEngineLog] = useState([]);   // { ts, job, result }
+  const [autoSell, setAutoSell] = useState(false);
+  const [autoBuy, setAutoBuy] = useState(false);
   const [promoteConfirm, setPromoteConfirm] = useState(null);
   const [walletEdit, setWalletEdit] = useState(null); // { strategyId, capital }
   const [orderForm, setOrderForm] = useState({ symbol: "", qty: "", price: "", type: "MARKET", side: "BUY" });
@@ -804,6 +808,32 @@ export default function Dashboard() {
     setLoad("wallet", false);
   }, []);
 
+  const fetchEngineStatus = useCallback(async () => {
+    try { const d = await (await fetch("/api/trading/status")).json(); if (d.ok) setEngineStatus(d); }
+    catch {}
+  }, []);
+
+  const runJob = useCallback(async (job, opts = {}) => {
+    const endpoints = {
+      "sell-check":   "/api/trading/sell-check",
+      "buy-signals":  "/api/trading/buy-signals",
+      "atsl-update":  "/api/trading/atsl-update",
+      "eod-summary":  "/api/trading/eod-summary",
+      "token-health": "/api/trading/token-health",
+    };
+    const url = endpoints[job];
+    if (!url) return;
+    const ts = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Kolkata" });
+    try {
+      const d = await (await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(opts) })).json();
+      setEngineLog((prev) => [{ ts, job, result: d, ok: !d.error }, ...prev].slice(0, 50));
+      fetchEngineStatus();
+      if (job === "sell-check" || job === "atsl-update") fetchPositions();
+    } catch (e) {
+      setEngineLog((prev) => [{ ts, job, result: { error: e.message }, ok: false }, ...prev].slice(0, 50));
+    }
+  }, [fetchEngineStatus]);
+
   const fetchZerodhaPortfolio = useCallback(async () => {
     setLoad("zPortfolio", true);
     try {
@@ -830,6 +860,7 @@ export default function Dashboard() {
   useEffect(() => { if (tab === "Lab") { fetchStrategies(); fetchWallet(); } }, [tab]);
   useEffect(() => { if (tab === "Orders") { fetchOrders(); fetchKiteOrders(); } }, [tab]);
   useEffect(() => { if (tab === "Positions") fetchZerodhaPortfolio(); }, [tab]);
+  useEffect(() => { if (tab === "Engine") fetchEngineStatus(); }, [tab]);
 
   // Auto-refresh positions every 30s
   useEffect(() => {
@@ -841,6 +872,32 @@ export default function Dashboard() {
     }, 30000);
     return () => clearInterval(id);
   }, [tab]);
+
+  // Auto-sell poll: every 30s when enabled
+  useEffect(() => {
+    if (!autoSell) return;
+    const id = setInterval(() => runJob("sell-check"), 30000);
+    return () => clearInterval(id);
+  }, [autoSell, runJob]);
+
+  // Auto buy-signal scan: every 3 min when enabled
+  useEffect(() => {
+    if (!autoBuy) return;
+    const id = setInterval(() => runJob("buy-signals"), 180000);
+    return () => clearInterval(id);
+  }, [autoBuy, runJob]);
+
+  // Auto ATSL update: check every 60s if we're in buy/close window
+  useEffect(() => {
+    if (!autoBuy) return;
+    const id = setInterval(() => {
+      const now = new Date();
+      const ist = new Date(now.getTime() + now.getTimezoneOffset() * 60000 + 5.5 * 3600000);
+      const h = ist.getHours(), m = ist.getMinutes();
+      if (h === 15 && m >= 14 && m <= 30) runJob("atsl-update");
+    }, 60000);
+    return () => clearInterval(id);
+  }, [autoBuy, runJob]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -949,6 +1006,7 @@ export default function Dashboard() {
               {t === "History" && "📜"}
               {t === "Lab" && "🧪"}
               {t === "Orders" && "📋"}
+              {t === "Engine" && "⚙️"}
               {t === "Crons" && "⏱"}
               {t === "Telegram" && "📨"}
               {t}
@@ -1580,6 +1638,130 @@ export default function Dashboard() {
               </Card>
             </div>
           )}
+
+          {/* ── ENGINE ── */}
+          {tab === "Engine" && (() => {
+            const isOpen = engineStatus.marketOpen;
+            const jobs = [
+              { key: "sell-check",   label: "Sell Tracker",    desc: "Check ATSL / TSL breach on all open positions",    icon: "📉", auto: autoSell, setAuto: setAutoSell, interval: "every 30s" },
+              { key: "buy-signals",  label: "Buy Signal Scan",  desc: "Scan Nifty 200 for 6EMA crossover candidates",     icon: "🔍", auto: autoBuy,  setAuto: setAutoBuy,  interval: "every 3 min" },
+              { key: "atsl-update",  label: "ATSL Buy/Close",   desc: "Execute buys at 3:15 PM & EOD force-close at 3:25", icon: "📈", auto: autoBuy,  setAuto: setAutoBuy,  interval: "auto at 3:15 PM" },
+              { key: "eod-summary",  label: "EOD Summary",      desc: "Send today's P&L summary to Telegram",             icon: "📊" },
+              { key: "token-health", label: "Token Health",     desc: "Check Kite token validity and alert via Telegram",  icon: "🔑" },
+            ];
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, animation: "fadeIn 0.25s ease" }}>
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>⚙️ Trading Engine</h2>
+                    <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text3)" }}>
+                      Direct API triggers — runs in your browser, no cron jobs needed
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", background: isOpen ? "rgba(0,229,153,.08)" : "rgba(255,71,87,.08)", border: `1px solid ${isOpen ? "rgba(0,229,153,.25)" : "rgba(255,71,87,.25)"}`, borderRadius: 8 }}>
+                      <StatusDot ok={isOpen} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: isOpen ? "var(--green)" : "var(--red)" }}>
+                        {isOpen ? "Market Open" : "Market Closed"}
+                      </span>
+                    </div>
+                    <button onClick={fetchEngineStatus} style={{ ...btnStyle("default"), padding: "6px 10px", fontSize: 12 }}>↻ Status</button>
+                  </div>
+                </div>
+
+                {/* Auto-pilot banner */}
+                <div style={{ padding: "12px 16px", background: (autoSell || autoBuy) ? "rgba(0,229,153,.06)" : "rgba(255,211,42,.05)", border: `1px solid ${(autoSell || autoBuy) ? "rgba(0,229,153,.2)" : "rgba(255,211,42,.2)"}`, borderRadius: 8, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: (autoSell || autoBuy) ? "var(--green)" : "var(--yellow)" }}>
+                    {(autoSell || autoBuy) ? "🟢 Auto-pilot ON — keep this tab open during market hours" : "⚡ Auto-pilot OFF — toggle to start automated polling"}
+                  </span>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", marginLeft: "auto", flexWrap: "wrap" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
+                      <Toggle checked={autoSell} onChange={() => { setAutoSell(!autoSell); if (!autoSell) runJob("sell-check"); }} />
+                      <span>Auto Sell (30s)</span>
+                    </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
+                      <Toggle checked={autoBuy} onChange={() => { setAutoBuy(!autoBuy); if (!autoBuy) runJob("buy-signals"); }} />
+                      <span>Auto Buy (3 min)</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Job cards */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+                  {jobs.map((job) => {
+                    const state = engineStatus.jobs?.find((j) => j.name === job.key) || {};
+                    const isAutoOn = job.auto;
+                    const lastRun  = state.lastRun ? new Date(state.lastRun).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : null;
+                    const statusOk = state.lastStatus === "ok";
+                    return (
+                      <div key={job.key} style={{ background: "var(--bg1)", border: `1px solid ${isAutoOn ? "rgba(0,229,153,.25)" : "var(--border)"}`, borderRadius: 10, padding: 16 }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 700 }}>{job.icon} {job.label}</div>
+                            <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 3 }}>{job.desc}</div>
+                          </div>
+                          {isAutoOn && (
+                            <Badge type="green">{job.interval}</Badge>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                          <div style={{ fontSize: 11, color: "var(--text3)" }}>
+                            {lastRun
+                              ? <span>Last: <span style={{ color: statusOk ? "var(--green)" : "var(--red)", fontFamily: "var(--font-mono)" }}>{lastRun}</span> <Badge type={statusOk ? "green" : "red"}>{state.lastStatus}</Badge></span>
+                              : <span style={{ color: "var(--text3)" }}>Never run</span>
+                            }
+                          </div>
+                          <button
+                            onClick={() => runJob(job.key)}
+                            disabled={!isOpen && job.key !== "eod-summary" && job.key !== "token-health"}
+                            style={{ ...btnStyle(isOpen || job.key === "eod-summary" || job.key === "token-health" ? "accent" : "default"), padding: "5px 12px", fontSize: 12 }}
+                          >
+                            ▶ Run Now
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Live engine log */}
+                <Card title="Engine Log" action={
+                  <button onClick={() => setEngineLog([])} style={{ ...btnStyle("default"), padding: "3px 8px", fontSize: 11 }}>Clear</button>
+                }>
+                  {engineLog.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: 20, color: "var(--text3)", fontSize: 12 }}>No activity yet — run a job or enable auto-pilot</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 340, overflowY: "auto" }}>
+                      {engineLog.map((entry, i) => (
+                        <div key={i} style={{ display: "flex", gap: 10, padding: "8px 10px", background: "var(--bg2)", borderRadius: 6, border: `1px solid ${entry.ok ? "var(--border)" : "rgba(255,71,87,.2)"}`, fontSize: 12 }}>
+                          <span style={{ fontFamily: "var(--font-mono)", color: "var(--text3)", whiteSpace: "nowrap" }}>{entry.ts}</span>
+                          <span style={{ fontWeight: 600, color: entry.ok ? "var(--green)" : "var(--red)", whiteSpace: "nowrap" }}>{entry.job}</span>
+                          <span style={{ color: "var(--text2)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {entry.result?.skipped
+                              ? `⏭ Skipped — ${entry.result.reason}`
+                              : entry.result?.error
+                              ? `❌ ${entry.result.error}`
+                              : entry.result?.sells?.length > 0
+                              ? `📉 ${entry.result.sells.length} sell(s): ${entry.result.sells.map(s => s.sym).join(", ")}`
+                              : entry.result?.signals?.length > 0
+                              ? `🔍 ${entry.result.signals.length} signal(s) found`
+                              : entry.result?.actions?.length > 0
+                              ? `📈 ${entry.result.actions.length} action(s): ${entry.result.actions.map(a => `${a.type} ${a.sym}`).join(", ")}`
+                              : entry.result?.ok
+                              ? "✅ OK"
+                              : JSON.stringify(entry.result).slice(0, 80)
+                            }
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+            );
+          })()}
 
           {/* ── CRONS ── */}
           {tab === "Crons" && (

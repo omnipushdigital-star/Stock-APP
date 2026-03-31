@@ -10,3 +10,5 @@ __pycache__/
 .r2-store/
 .kv-store.json
 {pages/
+
+.vercel
