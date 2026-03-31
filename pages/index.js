@@ -515,8 +515,8 @@ function PnLCalendar({ trades }) {
   const tradingDays = Object.values(pnlData);
   const winDays = tradingDays.filter(v => v > 0).length;
   const lossDays = tradingDays.filter(v => v < 0).length;
-  const bestDay = Math.max(...tradingDays, 0);
-  const worstDay = Math.min(...tradingDays, 0);
+  const bestDay = tradingDays.length ? Math.max(...tradingDays, 0) : 0;
+  const worstDay = tradingDays.length ? Math.min(...tradingDays, 0) : 0;
 
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const cells = [];
