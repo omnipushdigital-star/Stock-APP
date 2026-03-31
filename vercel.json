@@ -1,0 +1,41 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/token-health",
+      "schedule": "0 7 * * 1-5"
+    },
+    {
+      "path": "/api/cron/fno-ohlc",
+      "schedule": "0 8 * * 1-5"
+    },
+    {
+      "path": "/api/cron/cash-atsl",
+      "schedule": "*/1 9-21 * * 1-5"
+    },
+    {
+      "path": "/api/cron/buy-signals",
+      "schedule": "*/3 9-15 * * 1-5"
+    },
+    {
+      "path": "/api/cron/sell-tracker",
+      "schedule": "*/3 9-15 * * 1-5"
+    },
+    {
+      "path": "/api/cron/eod-summary",
+      "schedule": "35 15 * * 1-5"
+    },
+    {
+      "path": "/api/cron/paper-trading",
+      "schedule": "*/5 3-10 * * 1-5"
+    },
+    {
+      "path": "/api/cron/strategy-metrics",
+      "schedule": "30 10 * * 1-5"
+    }
+  ],
+  "functions": {
+    "pages/api/**": {
+      "maxDuration": 60
+    }
+  }
+}

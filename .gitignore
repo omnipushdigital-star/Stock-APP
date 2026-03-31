@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env.local
+.env
+*.session
+*.session-journal
+__pycache__/
+*.pyc
+.DS_Store
+.r2-store/
+.kv-store.json
+{pages/
