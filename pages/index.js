@@ -599,9 +599,9 @@ function PnLCalendar({ trades }) {
           })}
         </div>
 
-        {!hasRealData && (
+        {Object.keys(pnlData).length === 0 && (
           <div style={{ padding: "10px 16px", background: "rgba(255,211,42,0.05)", borderTop: "1px solid var(--border)", fontSize: 11, color: "var(--text3)" }}>
-            ⚠ Showing demo data — real P&L appears here once trades are recorded in your Excel files on Cloudflare R2
+            No closed trades yet — P&L will appear here once trades are recorded in your Excel files on Cloudflare R2
           </div>
         )}
       </div>
