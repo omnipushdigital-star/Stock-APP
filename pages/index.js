@@ -667,6 +667,7 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [authMsg, setAuthMsg] = useState("");
   const [isMobile, setIsMobile] = useState(false);
+  const [indices, setIndices] = useState([]);
 
   // Mobile detection
   useEffect(() => {
@@ -692,6 +693,20 @@ export default function Dashboard() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Indices ticker — fetch on load, refresh every 30s
+  const fetchIndices = useCallback(async () => {
+    try {
+      const d = await (await fetch("/api/market/indices")).json();
+      if (d.ok && d.indices?.length) setIndices(d.indices);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchIndices();
+    const id = setInterval(fetchIndices, 30000);
+    return () => clearInterval(id);
+  }, [fetchIndices]);
 
   // Check URL auth param + auto-handle request_token from Zerodha redirect
   useEffect(() => {
@@ -975,6 +990,43 @@ export default function Dashboard() {
           </button>
         </div>
       </header>
+
+      {/* Indices Ticker Strip */}
+      {indices.length > 0 && (
+        <div style={{
+          background: "var(--bg2)", borderBottom: "1px solid var(--border)",
+          overflowX: "auto", whiteSpace: "nowrap",
+          padding: "0 16px", display: "flex", alignItems: "center", gap: 0,
+          height: 36, flexShrink: 0,
+        }}>
+          {indices.map((idx, i) => {
+            const up = idx.changePct >= 0;
+            return (
+              <div key={i} style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "0 16px", borderRight: "1px solid var(--border)",
+                height: "100%", flexShrink: 0,
+              }}>
+                <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, letterSpacing: "0.03em" }}>{idx.label}</span>
+                <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text)" }}>
+                  {idx.ltp != null ? idx.ltp.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "—"}
+                </span>
+                {idx.changePct != null && (
+                  <span style={{
+                    fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 600,
+                    color: up ? "var(--green)" : "var(--red)",
+                  }}>
+                    {up ? "▲" : "▼"} {Math.abs(idx.changePct).toFixed(2)}%
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          <span style={{ fontSize: 10, color: "var(--text3)", paddingLeft: 12, flexShrink: 0 }}>
+            via Zerodha · 30s refresh
+          </span>
+        </div>
+      )}
 
       {/* Auth message */}
       {authMsg && (
