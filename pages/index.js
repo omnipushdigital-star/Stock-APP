@@ -1447,12 +1447,34 @@ export default function Dashboard() {
                             </button>
                             <button
                               onClick={async () => {
-                                await fetch(`/api/strategies/${s.id}/run`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-                                fetchStrategies();
+                                setLoad(`run_${s.id}`, true);
+                                try {
+                                  const r = await fetch(`/api/strategies/${s.id}/run`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ forceBuy: true, forceSell: true }),
+                                  });
+                                  const d = await r.json();
+                                  const msg = d.error
+                                    ? `❌ ${d.error}`
+                                    : d.result?.skipped
+                                    ? `⏭ Skipped: ${d.result.reason}`
+                                    : d.result?.buys?.length || d.result?.sells?.length
+                                    ? `✅ Buys: ${d.result.buys?.length || 0}, Sells: ${d.result.sells?.length || 0}`
+                                    : `✅ Ran — no signals`;
+                                  alert(msg);
+                                  fetchStrategies();
+                                  fetchLabTrades(s.id);
+                                } catch(e) {
+                                  alert(`❌ ${e.message}`);
+                                } finally {
+                                  setLoad(`run_${s.id}`, false);
+                                }
                               }}
-                              style={{ ...btnStyle("default"), padding: "5px 10px", fontSize: 11 }}
+                              disabled={loading[`run_${s.id}`]}
+                              style={{ ...btnStyle("accent"), padding: "5px 10px", fontSize: 11 }}
                             >
-                              ▶ Run Now
+                              {loading[`run_${s.id}`] ? <Spinner /> : "▶ Run Now"}
                             </button>
                             {!isLive ? (
                               promoteConfirm === s.id ? (
