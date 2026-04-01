@@ -694,7 +694,7 @@ export default function Dashboard() {
     return () => clearInterval(id);
   }, []);
 
-  // Indices ticker — fetch on load, refresh every 30s
+  // Indices ticker — fetch on load, refresh every 60s (quote API: 1 req/sec, avoid hammering)
   const fetchIndices = useCallback(async () => {
     try {
       const d = await (await fetch("/api/market/indices")).json();
@@ -704,7 +704,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchIndices();
-    const id = setInterval(fetchIndices, 30000);
+    const id = setInterval(fetchIndices, 60000); // 1 min — market data, not tick data
     return () => clearInterval(id);
   }, [fetchIndices]);
 
@@ -864,13 +864,13 @@ export default function Dashboard() {
     setLoad("zPortfolio", false);
   }, []);
 
-  // Initial load
+  // Initial load — staggered to avoid simultaneous Kite API calls
   useEffect(() => {
     fetchToken();
     fetchPositions();
-    fetchZerodhaPortfolio();
-    fetchSignals();
-    fetchWallet();
+    setTimeout(() => fetchZerodhaPortfolio(), 1500); // +1.5s: holdings + positions (2 Kite calls)
+    setTimeout(() => fetchSignals(),          3000); // +3s
+    setTimeout(() => fetchWallet(),           4500); // +4.5s: margins (1 Kite call)
   }, []);
 
   useEffect(() => { if (tab === "History" || tab === "P&L") fetchTrades(); }, [tab]);
@@ -881,21 +881,29 @@ export default function Dashboard() {
   useEffect(() => { if (tab === "Positions") fetchZerodhaPortfolio(); }, [tab]);
   useEffect(() => { if (tab === "Engine") fetchEngineStatus(); }, [tab]);
 
-  // Auto-refresh positions every 30s
+  // Smart position refresh — rate aware:
+  // During market hours: every 2min (holdings/positions don't change on every tick)
+  // Outside market hours: every 10min (no live prices changing)
   useEffect(() => {
+    const MARKET_INTERVAL    = 2 * 60 * 1000;  // 2 min during market hours
+    const OFFMARKET_INTERVAL = 10 * 60 * 1000; // 10 min outside market hours
+
     const id = setInterval(() => {
       if (tab === "Positions" || tab === "ATSL Tracker") {
+        const interval = marketOpen ? MARKET_INTERVAL : OFFMARKET_INTERVAL;
+        // Use a ref-based check to avoid resetting interval on every marketOpen change
         fetchPositions();
-        fetchZerodhaPortfolio();
+        setTimeout(() => fetchZerodhaPortfolio(), 1000); // stagger by 1s
       }
-    }, 30000);
-    return () => clearInterval(id);
-  }, [tab]);
+    }, marketOpen ? 2 * 60 * 1000 : 10 * 60 * 1000);
 
-  // Auto-sell poll: every 30s when enabled
+    return () => clearInterval(id);
+  }, [tab, marketOpen]);
+
+  // Auto-sell poll: every 60s when enabled (quote API: 1 req/sec — don't hammer)
   useEffect(() => {
     if (!autoSell) return;
-    const id = setInterval(() => runJob("sell-check"), 30000);
+    const id = setInterval(() => runJob("sell-check"), 60000);
     return () => clearInterval(id);
   }, [autoSell, runJob]);
 
@@ -920,7 +928,16 @@ export default function Dashboard() {
 
   async function handleRefresh() {
     setRefreshing(true);
-    await Promise.all([fetchToken(), fetchPositions(), fetchZerodhaPortfolio(), fetchSignals(), fetchWallet()]);
+    // Stagger Kite API calls: 10 req/sec limit for REST endpoints
+    // Each group waits 500ms to avoid simultaneous calls hitting rate limits
+    fetchToken();
+    fetchPositions();
+    await new Promise(r => setTimeout(r, 500));
+    fetchZerodhaPortfolio();
+    await new Promise(r => setTimeout(r, 500));
+    fetchSignals();
+    await new Promise(r => setTimeout(r, 500));
+    await fetchWallet();
     setRefreshing(false);
   }
 
