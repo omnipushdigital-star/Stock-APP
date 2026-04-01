@@ -668,6 +668,8 @@ export default function Dashboard() {
   const [authMsg, setAuthMsg] = useState("");
   const [isMobile, setIsMobile] = useState(false);
   const [indices, setIndices] = useState([]);
+  const [livePrices, setLivePrices] = useState({}); // { SYMBOL: { ltp, change, changePct } }
+  const liveTickerRef = useRef(null); // holds the 1s interval id
 
   // Mobile detection
   useEffect(() => {
@@ -694,19 +696,53 @@ export default function Dashboard() {
     return () => clearInterval(id);
   }, []);
 
-  // Indices ticker — fetch on load, refresh every 60s (quote API: 1 req/sec, avoid hammering)
-  const fetchIndices = useCallback(async () => {
-    try {
-      const d = await (await fetch("/api/market/indices")).json();
-      if (d.ok && d.indices?.length) setIndices(d.indices);
-    } catch {}
-  }, []);
+  // ── Unified 1-second live price ticker ─────────────────────────────────────
+  // Batches ALL symbols (indices + holdings + ATSL positions) into ONE LTP call.
+  // Zerodha allows: 1 req/sec, up to 1,000 symbols per call — perfect fit.
+  // Only runs during market hours to avoid wasting calls on stale data.
+  const livePriceSymbolsRef = useRef([]); // updated whenever positions/holdings change
 
+  // Collect all symbols that need live prices
   useEffect(() => {
-    fetchIndices();
-    const id = setInterval(fetchIndices, 60000); // 1 min — market data, not tick data
-    return () => clearInterval(id);
-  }, [fetchIndices]);
+    const syms = new Set();
+    positions.forEach(r => { const s = (r["Symbol"] || "").replace(".NS","").trim(); if (s) syms.add(s); });
+    zerodhaPortfolio.holdings.forEach(h => { if (h.symbol) syms.add(h.symbol); });
+    zerodhaPortfolio.netPositions.forEach(p => { if (p.symbol) syms.add(p.symbol); });
+    livePriceSymbolsRef.current = [...syms];
+  }, [positions, zerodhaPortfolio]);
+
+  // 1s ticker — only during market hours
+  useEffect(() => {
+    const tick = async () => {
+      if (!marketOpen) return; // don't call outside market hours
+      try {
+        const syms = livePriceSymbolsRef.current.join(",");
+        const url  = `/api/market/live-prices?indices=1${syms ? `&symbols=${syms}` : ""}`;
+        const d    = await (await fetch(url)).json();
+        if (!d.ok) return;
+        if (d.indices?.length) setIndices(d.indices);
+        if (d.prices)          setLivePrices(d.prices);
+      } catch {}
+    };
+
+    // Initial fetch immediately (market open or not — for first load)
+    const init = async () => {
+      try {
+        const syms = livePriceSymbolsRef.current.join(",");
+        const url  = `/api/market/live-prices?indices=1${syms ? `&symbols=${syms}` : ""}`;
+        const d    = await (await fetch(url)).json();
+        if (d.ok) {
+          if (d.indices?.length) setIndices(d.indices);
+          if (d.prices)          setLivePrices(d.prices);
+        }
+      } catch {}
+    };
+    init();
+
+    if (liveTickerRef.current) clearInterval(liveTickerRef.current);
+    liveTickerRef.current = setInterval(tick, 1000);
+    return () => clearInterval(liveTickerRef.current);
+  }, [marketOpen]); // restarts when market opens/closes
 
   // Check URL auth param + auto-handle request_token from Zerodha redirect
   useEffect(() => {
@@ -881,22 +917,17 @@ export default function Dashboard() {
   useEffect(() => { if (tab === "Positions") fetchZerodhaPortfolio(); }, [tab]);
   useEffect(() => { if (tab === "Engine") fetchEngineStatus(); }, [tab]);
 
-  // Smart position refresh — rate aware:
-  // During market hours: every 2min (holdings/positions don't change on every tick)
-  // Outside market hours: every 10min (no live prices changing)
+  // Structure refresh (holdings list, qty, avg prices) — slow, separate from live prices
+  // LTP is handled by the 1s live-prices ticker above
   useEffect(() => {
-    const MARKET_INTERVAL    = 2 * 60 * 1000;  // 2 min during market hours
-    const OFFMARKET_INTERVAL = 10 * 60 * 1000; // 10 min outside market hours
-
+    // Refresh portfolio structure every 5 min during market hours, 15 min outside
+    const interval = marketOpen ? 5 * 60 * 1000 : 15 * 60 * 1000;
     const id = setInterval(() => {
       if (tab === "Positions" || tab === "ATSL Tracker") {
-        const interval = marketOpen ? MARKET_INTERVAL : OFFMARKET_INTERVAL;
-        // Use a ref-based check to avoid resetting interval on every marketOpen change
         fetchPositions();
-        setTimeout(() => fetchZerodhaPortfolio(), 1000); // stagger by 1s
+        setTimeout(() => fetchZerodhaPortfolio(), 1000);
       }
-    }, marketOpen ? 2 * 60 * 1000 : 10 * 60 * 1000);
-
+    }, interval);
     return () => clearInterval(id);
   }, [tab, marketOpen]);
 
@@ -1040,7 +1071,7 @@ export default function Dashboard() {
             );
           })}
           <span style={{ fontSize: 10, color: "var(--text3)", paddingLeft: 12, flexShrink: 0 }}>
-            via Zerodha · 30s refresh
+            via Zerodha · {marketOpen ? "live 1s" : "market closed"}
           </span>
         </div>
       )}
@@ -1143,18 +1174,36 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Summary stat cards */}
+              {/* Summary stat cards — live recalculated from livePrices */}
               {zerodhaPortfolio.summary && (() => {
                 const s = zerodhaPortfolio.summary;
+                // Recalculate with live prices if available
+                let liveInvested = 0, liveCurVal = 0, liveDayPnL = 0;
+                const hasLive = Object.keys(livePrices).length > 0;
+                if (hasLive && zerodhaPortfolio.holdings.length) {
+                  zerodhaPortfolio.holdings.forEach(h => {
+                    const ltp    = livePrices[h.symbol]?.ltp ?? h.lastPrice;
+                    const close  = livePrices[h.symbol]?.close ?? h.lastPrice;
+                    liveInvested += h.invested;
+                    liveCurVal   += ltp * h.qty;
+                    liveDayPnL   += (ltp - close) * h.qty;
+                  });
+                } else {
+                  liveInvested = s.holdingsInvested;
+                  liveCurVal   = s.holdingsCurrentVal;
+                  liveDayPnL   = s.dayPnL;
+                }
+                const livePnL    = liveCurVal - liveInvested;
+                const livePnLPct = liveInvested ? (livePnL / liveInvested * 100) : 0;
                 return (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
                     {[
                       { label: "Holdings", value: s.holdingsCount, color: "var(--blue)" },
-                      { label: "Invested", value: `₹${Math.round(s.holdingsInvested).toLocaleString("en-IN")}`, color: "var(--text)" },
-                      { label: "Current Value", value: `₹${Math.round(s.holdingsCurrentVal).toLocaleString("en-IN")}`, color: "var(--blue)" },
-                      { label: "Total P&L", value: `${s.holdingsPnL >= 0 ? "+" : ""}₹${Math.round(Math.abs(s.holdingsPnL)).toLocaleString("en-IN")}`, color: s.holdingsPnL >= 0 ? "var(--green)" : "var(--red)" },
-                      { label: "P&L %", value: `${s.holdingsPnLPct >= 0 ? "+" : ""}${s.holdingsPnLPct}%`, color: s.holdingsPnLPct >= 0 ? "var(--green)" : "var(--red)" },
-                      { label: "Day P&L", value: `${s.dayPnL >= 0 ? "+" : ""}₹${Math.round(Math.abs(s.dayPnL)).toLocaleString("en-IN")}`, color: s.dayPnL >= 0 ? "var(--green)" : "var(--red)" },
+                      { label: "Invested", value: `₹${Math.round(liveInvested).toLocaleString("en-IN")}`, color: "var(--text)" },
+                      { label: "Current Value", value: `₹${Math.round(liveCurVal).toLocaleString("en-IN")}`, color: "var(--blue)" },
+                      { label: "Total P&L", value: `${livePnL >= 0 ? "+" : ""}₹${Math.round(Math.abs(livePnL)).toLocaleString("en-IN")}`, color: livePnL >= 0 ? "var(--green)" : "var(--red)" },
+                      { label: "P&L %", value: `${livePnLPct >= 0 ? "+" : ""}${livePnLPct.toFixed(2)}%`, color: livePnLPct >= 0 ? "var(--green)" : "var(--red)" },
+                      { label: "Day P&L", value: `${liveDayPnL >= 0 ? "+" : ""}₹${Math.round(Math.abs(liveDayPnL)).toLocaleString("en-IN")}`, color: liveDayPnL >= 0 ? "var(--green)" : "var(--red)" },
                     ].map((stat) => (
                       <div key={stat.label} style={{ background: "var(--bg1)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
                         <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4, letterSpacing: "0.05em", textTransform: "uppercase" }}>{stat.label}</div>
@@ -1189,7 +1238,15 @@ export default function Dashboard() {
                         <tr>{["Symbol","Qty","T+1","Avg Price","LTP","Invested","Current","P&L","P&L %","Day Chg %"].map(h => <th key={h} style={mThStyle(isMobile)}>{h}</th>)}</tr>
                       </thead>
                       <tbody>
-                        {zerodhaPortfolio.holdings.map((h, i) => (
+                        {zerodhaPortfolio.holdings.map((h, i) => {
+                          // Use live 1s price if available, fallback to snapshot
+                          const lp      = livePrices[h.symbol];
+                          const ltp     = lp?.ltp ?? h.lastPrice;
+                          const curVal  = ltp * h.qty;
+                          const pnlVal  = curVal - h.invested;
+                          const pnlPct  = h.invested ? (pnlVal / h.invested * 100) : 0;
+                          const dayChg  = lp?.changePct ?? h.dayChangePct;
+                          return (
                           <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                             <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 700 }}>{h.symbol}</td>
                             <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>{h.qty}</td>
@@ -1197,16 +1254,17 @@ export default function Dashboard() {
                               {h.t1Qty > 0 ? h.t1Qty : "—"}
                             </td>
                             <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>₹{fmt(h.avgPrice)}</td>
-                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 600 }}>₹{fmt(h.lastPrice)}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 600, color: lp ? "var(--accent)" : "inherit" }}>₹{fmt(ltp)}</td>
                             <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: "var(--text2)" }}>₹{Math.round(h.invested).toLocaleString("en-IN")}</td>
-                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>₹{Math.round(h.currentVal).toLocaleString("en-IN")}</td>
-                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: h.pnlVal >= 0 ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
-                              {h.pnlVal >= 0 ? "+" : ""}₹{Math.round(Math.abs(h.pnlVal)).toLocaleString("en-IN")}
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>₹{Math.round(curVal).toLocaleString("en-IN")}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: pnlVal >= 0 ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
+                              {pnlVal >= 0 ? "+" : ""}₹{Math.round(Math.abs(pnlVal)).toLocaleString("en-IN")}
                             </td>
-                            <td style={mTdStyle(isMobile)}><PnlBadge val={h.pnlPct} /></td>
-                            <td style={mTdStyle(isMobile)}><PnlBadge val={h.dayChangePct} /></td>
+                            <td style={mTdStyle(isMobile)}><PnlBadge val={pnlPct.toFixed(2)} /></td>
+                            <td style={mTdStyle(isMobile)}><PnlBadge val={dayChg} /></td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1222,19 +1280,25 @@ export default function Dashboard() {
                         <tr>{["Symbol","Product","Qty","Avg Price","LTP","P&L","P&L %"].map(h => <th key={h} style={mThStyle(isMobile)}>{h}</th>)}</tr>
                       </thead>
                       <tbody>
-                        {zerodhaPortfolio.netPositions.map((p, i) => (
+                        {zerodhaPortfolio.netPositions.map((p, i) => {
+                          const lp     = livePrices[p.symbol];
+                          const ltp    = lp?.ltp ?? p.lastPrice;
+                          const pnlVal = p.qty * (ltp - p.avgPrice);
+                          const pnlPct = p.avgPrice ? (pnlVal / (Math.abs(p.qty) * p.avgPrice) * 100) : 0;
+                          return (
                           <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                             <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 700 }}>{p.symbol}</td>
                             <td style={mTdStyle(isMobile)}><Badge type={p.product === "CNC" ? "blue" : "yellow"}>{p.product}</Badge></td>
                             <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: p.qty > 0 ? "var(--green)" : "var(--red)" }}>{p.qty > 0 ? "+" : ""}{p.qty}</td>
                             <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)" }}>₹{fmt(p.avgPrice)}</td>
-                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 600 }}>₹{fmt(p.lastPrice)}</td>
-                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: p.pnlVal >= 0 ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
-                              {p.pnlVal >= 0 ? "+" : ""}₹{Math.round(Math.abs(p.pnlVal)).toLocaleString("en-IN")}
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", fontWeight: 600, color: lp ? "var(--accent)" : "inherit" }}>₹{fmt(ltp)}</td>
+                            <td style={{ ...mTdStyle(isMobile), fontFamily: "var(--font-mono)", color: pnlVal >= 0 ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
+                              {pnlVal >= 0 ? "+" : ""}₹{Math.round(Math.abs(pnlVal)).toLocaleString("en-IN")}
                             </td>
-                            <td style={mTdStyle(isMobile)}><PnlBadge val={p.pnlPct} /></td>
+                            <td style={mTdStyle(isMobile)}><PnlBadge val={pnlPct.toFixed(2)} /></td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
