@@ -702,22 +702,31 @@ export default function Dashboard() {
   // Only runs during market hours to avoid wasting calls on stale data.
   const livePriceSymbolsRef = useRef([]); // updated whenever positions/holdings change
 
-  // Collect all symbols that need live prices
+  // Collect all symbols with exchange prefix (e.g. "NSE:RELIANCE", "BSE:MUTHOOTFIN")
+  // Holdings/positions carry their exchange from Zerodha; ATSL positions default to NSE
   useEffect(() => {
     const syms = new Set();
-    positions.forEach(r => { const s = (r["Symbol"] || "").replace(".NS","").trim(); if (s) syms.add(s); });
-    zerodhaPortfolio.holdings.forEach(h => { if (h.symbol) syms.add(h.symbol); });
-    zerodhaPortfolio.netPositions.forEach(p => { if (p.symbol) syms.add(p.symbol); });
+    // ATSL R2 positions — always NSE
+    positions.forEach(r => {
+      const s = (r["Symbol"] || "").replace(".NS","").trim();
+      if (s) syms.add(`NSE:${s}`);
+    });
+    // Zerodha holdings — use actual exchange from broker
+    zerodhaPortfolio.holdings.forEach(h => {
+      if (h.symbol && h.exchange) syms.add(`${h.exchange}:${h.symbol}`);
+    });
+    zerodhaPortfolio.netPositions.forEach(p => {
+      if (p.symbol && p.exchange) syms.add(`${p.exchange}:${p.symbol}`);
+    });
     livePriceSymbolsRef.current = [...syms];
   }, [positions, zerodhaPortfolio]);
 
   // 1s ticker — only during market hours
   useEffect(() => {
-    const tick = async () => {
-      if (!marketOpen) return; // don't call outside market hours
+    const doFetch = async () => {
       try {
         const syms = livePriceSymbolsRef.current.join(",");
-        const url  = `/api/market/live-prices?indices=1${syms ? `&symbols=${syms}` : ""}`;
+        const url  = `/api/market/live-prices?indices=1${syms ? `&symbols=${encodeURIComponent(syms)}` : ""}`;
         const d    = await (await fetch(url)).json();
         if (!d.ok) return;
         if (d.indices?.length) setIndices(d.indices);
@@ -725,19 +734,10 @@ export default function Dashboard() {
       } catch {}
     };
 
-    // Initial fetch immediately (market open or not — for first load)
-    const init = async () => {
-      try {
-        const syms = livePriceSymbolsRef.current.join(",");
-        const url  = `/api/market/live-prices?indices=1${syms ? `&symbols=${syms}` : ""}`;
-        const d    = await (await fetch(url)).json();
-        if (d.ok) {
-          if (d.indices?.length) setIndices(d.indices);
-          if (d.prices)          setLivePrices(d.prices);
-        }
-      } catch {}
-    };
-    init();
+    const tick = () => { if (marketOpen) doFetch(); };
+
+    // Initial fetch regardless of market hours (shows last known prices)
+    doFetch();
 
     if (liveTickerRef.current) clearInterval(liveTickerRef.current);
     liveTickerRef.current = setInterval(tick, 1000);
@@ -1179,11 +1179,12 @@ export default function Dashboard() {
                 const s = zerodhaPortfolio.summary;
                 // Recalculate with live prices if available
                 let liveInvested = 0, liveCurVal = 0, liveDayPnL = 0;
-                const hasLive = Object.keys(livePrices).length > 0;
+                const hasLive = Object.keys(livePrices).length > 0 && zerodhaPortfolio.holdings.some(h => livePrices[`${h.exchange}:${h.symbol}`]);
                 if (hasLive && zerodhaPortfolio.holdings.length) {
                   zerodhaPortfolio.holdings.forEach(h => {
-                    const ltp    = livePrices[h.symbol]?.ltp ?? h.lastPrice;
-                    const close  = livePrices[h.symbol]?.close ?? h.lastPrice;
+                    const lp     = livePrices[`${h.exchange}:${h.symbol}`] || livePrices[h.symbol];
+                    const ltp    = lp?.ltp ?? h.lastPrice;
+                    const close  = lp?.close ?? h.closePrice ?? h.lastPrice;
                     liveInvested += h.invested;
                     liveCurVal   += ltp * h.qty;
                     liveDayPnL   += (ltp - close) * h.qty;
@@ -1239,8 +1240,8 @@ export default function Dashboard() {
                       </thead>
                       <tbody>
                         {zerodhaPortfolio.holdings.map((h, i) => {
-                          // Use live 1s price if available, fallback to snapshot
-                          const lp      = livePrices[h.symbol];
+                          // Look up by exchange:symbol key (e.g. "NSE:RELIANCE")
+                          const lp      = livePrices[`${h.exchange}:${h.symbol}`] || livePrices[h.symbol];
                           const ltp     = lp?.ltp ?? h.lastPrice;
                           const curVal  = ltp * h.qty;
                           const pnlVal  = curVal - h.invested;
@@ -1281,7 +1282,7 @@ export default function Dashboard() {
                       </thead>
                       <tbody>
                         {zerodhaPortfolio.netPositions.map((p, i) => {
-                          const lp     = livePrices[p.symbol];
+                          const lp     = livePrices[`${p.exchange}:${p.symbol}`] || livePrices[p.symbol];
                           const ltp    = lp?.ltp ?? p.lastPrice;
                           const pnlVal = p.qty * (ltp - p.avgPrice);
                           const pnlPct = p.avgPrice ? (pnlVal / (Math.abs(p.qty) * p.avgPrice) * 100) : 0;

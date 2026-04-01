@@ -1,73 +1,62 @@
-// GET /api/market/live-prices?symbols=RELIANCE,TCS,INFY&indices=1
-// Returns LTP for any set of NSE symbols + optionally the 6 major indices.
-// All symbols batched into ONE Kite LTP call (up to 1,000 symbols per call).
-// Designed to be called every 1 second from the dashboard.
+// GET /api/market/live-prices?symbols=NSE:RELIANCE,BSE:MUTHOOTFIN&indices=1
+// Returns LTP + change% for any set of exchange-qualified symbols + major indices.
+// Uses getOHLC (not getLTP) so we get the previous close for change calculation.
+// All symbols batched into ONE Kite call. Designed to be called every 1 second.
 
 import { getKite } from "../../../lib/kite";
 
 const INDEX_SYMBOLS = [
-  { key: "NIFTY 50",         label: "NIFTY 50",     sym: "NSE:NIFTY 50" },
-  { key: "NIFTY BANK",       label: "BANK NIFTY",   sym: "NSE:NIFTY BANK" },
-  { key: "SENSEX",           label: "SENSEX",        sym: "BSE:SENSEX" },
-  { key: "NIFTY IT",         label: "NIFTY IT",      sym: "NSE:NIFTY IT" },
-  { key: "NIFTY MIDCAP 100", label: "MIDCAP 100",   sym: "NSE:NIFTY MIDCAP 100" },
-  { key: "NIFTY FIN SERVICE",label: "FIN SERVICE",   sym: "NSE:NIFTY FIN SERVICE" },
+  { label: "NIFTY 50",    sym: "NSE:NIFTY 50" },
+  { label: "BANK NIFTY",  sym: "NSE:NIFTY BANK" },
+  { label: "SENSEX",      sym: "BSE:SENSEX" },
+  { label: "NIFTY IT",    sym: "NSE:NIFTY IT" },
+  { label: "MIDCAP 100",  sym: "NSE:NIFTY MIDCAP 100" },
+  { label: "FIN SERVICE", sym: "NSE:NIFTY FIN SERVICE" },
 ];
+
+function calcChange(ltp, close) {
+  if (!ltp || !close || close === ltp) return { change: 0, changePct: 0 };
+  const change    = parseFloat((ltp - close).toFixed(2));
+  const changePct = parseFloat(((ltp - close) / close * 100).toFixed(2));
+  return { change, changePct };
+}
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
-
-  // No server-side cache — this is a live 1s ticker
   res.setHeader("Cache-Control", "no-store");
 
   const { symbols = "", indices = "1" } = req.query;
   const withIndices = indices !== "0";
 
-  // Build full symbol list: NSE stocks + optional indices
-  const stockSyms   = symbols ? symbols.split(",").map(s => s.trim().toUpperCase()).filter(Boolean) : [];
-  const indexKiteSyms = withIndices ? INDEX_SYMBOLS.map(i => i.sym) : [];
+  // Accept pre-qualified symbols like "NSE:RELIANCE,BSE:MUTHOOTFIN"
+  const stockKeys     = symbols ? symbols.split(",").map(s => s.trim()).filter(Boolean) : [];
+  const indexKeys     = withIndices ? INDEX_SYMBOLS.map(i => i.sym) : [];
+  const allKeys       = [...new Set([...stockKeys, ...indexKeys])].slice(0, 1000);
 
-  // Deduplicate and cap at 1,000 (Kite limit)
-  const nseStockKeys   = [...new Set(stockSyms)].slice(0, 990).map(s => `NSE:${s}`);
-  const allKiteSymbols = [...new Set([...nseStockKeys, ...indexKiteSyms])];
-
-  if (!allKiteSymbols.length) {
-    return res.json({ ok: true, prices: {}, indices: [] });
-  }
+  if (!allKeys.length) return res.json({ ok: true, prices: {}, indices: [] });
 
   try {
     const kite = await getKite();
-    const data = await kite.getLTP(allKiteSymbols); // single API call
+    // getOHLC returns last_price + ohlc.close (prev day close) — needed for change%
+    const data = await kite.getOHLC(allKeys);
 
-    // Build price map: SYMBOL → { ltp, close, change, changePct }
+    // Build prices map keyed by the original symbol string passed in
     const prices = {};
-    for (const sym of stockSyms) {
-      const key = `NSE:${sym}`;
-      const d   = data[key];
+    for (const key of stockKeys) {
+      const d = data[key];
       if (!d) continue;
-      const ltp       = d.last_price;
-      const close     = d.ohlc?.close ?? ltp;
-      prices[sym] = {
-        ltp,
-        close,
-        change:    parseFloat((ltp - close).toFixed(2)),
-        changePct: parseFloat(((ltp - close) / close * 100).toFixed(2)),
-      };
+      const ltp   = d.last_price;
+      const close = d.ohlc?.close ?? ltp;
+      prices[key] = { ltp, close, ...calcChange(ltp, close) };
     }
 
     // Build indices array
-    const indicesOut = withIndices ? INDEX_SYMBOLS.map(({ key, label, sym }) => {
+    const indicesOut = withIndices ? INDEX_SYMBOLS.map(({ label, sym }) => {
       const d = data[sym];
       if (!d) return { label, ltp: null, change: null, changePct: null };
       const ltp   = d.last_price;
       const close = d.ohlc?.close ?? ltp;
-      return {
-        label,
-        ltp,
-        close,
-        change:    parseFloat((ltp - close).toFixed(2)),
-        changePct: parseFloat(((ltp - close) / close * 100).toFixed(2)),
-      };
+      return { label, ltp, close, ...calcChange(ltp, close) };
     }) : [];
 
     res.json({ ok: true, prices, indices: indicesOut, ts: new Date().toISOString() });
