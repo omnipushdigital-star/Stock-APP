@@ -15,8 +15,9 @@ function isAuthorized(req) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
   if (!isAuthorized(req)) return res.status(401).json({ error: "Unauthorized" });
+  const { force = false } = req.body || {};
   try {
-    const result = await runSellCheck();
+    const result = await runSellCheck({ force });
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
