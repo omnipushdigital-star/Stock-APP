@@ -70,6 +70,40 @@ function Badge({ children, type = "default" }) {
   );
 }
 
+function LogicPanel({ logic }) {
+  if (!logic) return null;
+  return (
+    <div style={{ borderTop: "1px solid var(--border)", padding: "14px 16px", background: "rgba(124,131,253,.04)", fontSize: 12 }}>
+      {logic.buy?.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontWeight: 700, color: "var(--green)", marginBottom: 5, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>▲ Buy Conditions</div>
+          {logic.buy.map((c, i) => (
+            <div key={i} style={{ color: "var(--text2)", padding: "2px 0 2px 10px", borderLeft: "2px solid rgba(0,229,153,.3)" }}>{c}</div>
+          ))}
+        </div>
+      )}
+      {logic.sell?.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontWeight: 700, color: "var(--red)", marginBottom: 5, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>▼ Sell / Exit Conditions</div>
+          {logic.sell.map((c, i) => (
+            <div key={i} style={{ color: "var(--text2)", padding: "2px 0 2px 10px", borderLeft: "2px solid rgba(255,71,87,.3)" }}>{c}</div>
+          ))}
+        </div>
+      )}
+      {logic.config && Object.keys(logic.config).length > 0 && (
+        <div>
+          <div style={{ fontWeight: 700, color: "var(--blue)", marginBottom: 5, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>⚙ Parameters</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 16px" }}>
+            {Object.entries(logic.config).map(([k, v]) => (
+              <span key={k} style={{ color: "var(--text3)" }}><span style={{ color: "var(--text2)", fontWeight: 600 }}>{k}:</span> {v}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Toggle({ checked, onChange, disabled }) {
   return (
     <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 }}>
@@ -638,6 +672,94 @@ const btnStyle = (type) => ({
 // ─── Main Dashboard ──────────────────────────────────────────
 const TABS = ["Positions", "ATSL Tracker", "P&L", "Signals", "History", "Lab", "Orders", "Engine", "Crons", "Telegram", "Screener"];
 
+// Logic summaries shown when a job/strategy card is clicked
+const ENGINE_LOGIC = {
+  "sell-check": {
+    title: "Sell Tracker — Logic",
+    buy: [],
+    sell: [
+      "Adaptive TSL activates when profit ≥ 1%",
+      "TSL buffer: 0.5% (P&L <2%), 0.4% (<5%), 0.3% (<10%), 0.2% (≥10%)",
+      "Stop = max(highestPrice × (1−buffer), buyPrice × 1.01)",
+      "Max hold: 7 days → force sell",
+      "After 3:15 PM: sell if CMP < 6EMA",
+    ],
+    config: { "Universe": "Open ATSL positions (Excel)", "Frequency": "Every 5 min via Cloudflare / 30s autopilot", "Orders": "Live market sell via Kite" },
+  },
+  "buy-signals": {
+    title: "Buy Signal Scan — Logic",
+    buy: [
+      "C1: prev day open < 6EMA  (was below EMA)",
+      "C2: prev day close < 6EMA  (confirmed below)",
+      "C3: CMP > 6EMA × 1.002  (crossed above with buffer)",
+      "NIFTY 50 must also be above its own 6EMA",
+      "Signals saved to R2 — orders placed later by ATSL Buy/Close",
+    ],
+    sell: [],
+    config: { "Universe": "Nifty 200", "EMA period": "6", "Frequency": "Every 30 min via Cloudflare / 3 min autopilot", "Output": "buy_signals_today.json in R2" },
+  },
+  "atsl-update": {
+    title: "ATSL Buy/Close — Logic",
+    buy: [
+      "Window: 3:15–3:25 PM IST",
+      "Reads today's signals from R2 (buy_signals_today.json)",
+      "Buys top 3 signals not already held today",
+      "Position size: ₹10,000 per trade (₹1L wallet ÷ 10)",
+      "Initial stop set at CMP × 0.97 (3% below buy)",
+    ],
+    sell: [
+      "Window: after 3:25 PM IST",
+      "Force-closes ALL open positions at market price (EOD)",
+    ],
+    config: { "Universe": "From pre-scanned signals", "Buy window": "3:15–3:25 PM", "Close window": "After 3:25 PM", "Max buys": "3 per day", "Orders": "Live market via Kite" },
+  },
+  "eod-summary": {
+    title: "EOD Summary — Logic",
+    buy: [],
+    sell: [],
+    config: { "Runs at": "3:35 PM IST", "Action": "Calculates today's closed P&L, sends Telegram summary", "Flag": "Sets eod_done flag to prevent double-send", "Output": "Telegram message with winners/losers/total P&L" },
+  },
+  "token-health": {
+    title: "Token Health — Logic",
+    buy: [],
+    sell: [],
+    config: { "Runs at": "8:30 AM IST", "Action": "Validates Kite access token, sends Telegram reminder if expired", "Alert": "Includes login URL if token is invalid" },
+  },
+};
+
+const STRATEGY_LOGIC = {
+  "cash-atsl-v1": {
+    buy: ["C1: prev open < 6EMA", "C2: prev close < 6EMA", "C3: CMP > 6EMA × 1.002", "NIFTY 50 > its 6EMA (market filter)", "Buy window: 3:15–3:25 PM IST"],
+    sell: ["Adaptive TSL (4 tiers: 0.5%/0.4%/0.3%/0.2%), activates at 1% profit", "Max hold: 7 days", "CMP < 6EMA after 3:15 PM"],
+    config: { "Universe": "Nifty 200", "EMA": "6-period", "Capital": "₹1L", "Max positions": "10", "Mode": "LIVE — real orders" },
+  },
+  "cash-atsl-paper": {
+    buy: ["C1: prev open < 6EMA", "C2: prev close < 6EMA", "C3: CMP > 6EMA × 1.002", "NIFTY 50 > its 6EMA (market filter)", "Buy window: 3:15–3:25 PM IST"],
+    sell: ["Adaptive TSL (4 tiers: 0.5%/0.4%/0.3%/0.2%), activates at 1% profit", "Max hold: 7 days", "CMP < 6EMA after 3:15 PM"],
+    config: { "Universe": "Nifty 200", "EMA": "6-period", "Capital": "₹10L (virtual)", "Max positions": "10", "Mode": "PAPER — no real orders" },
+  },
+  "ema-above": {
+    buy: ["Prev day close > 6EMA  (confirmed uptrend)", "Today close > 6EMA  (trend continues)", "Today close > prev close  (positive day)", "CMP > 6EMA  (live confirmation)", "NIFTY 50 > its own 6EMA  (market filter)"],
+    sell: ["EMA Breakdown: CMP drops below 6EMA", "Adaptive TSL (4 tiers: 0.5%/0.4%/0.3%/0.2%), activates at 1% profit", "Max hold: 10 days"],
+    config: { "Universe": "Nifty 200", "EMA": "6-period", "Capital": "₹10L (virtual)", "Max positions": "10", "Mode": "PAPER" },
+  },
+  "ema-crossover": {
+    buy: ["6EMA crosses above 20EMA (golden cross)"],
+    sell: ["6EMA crosses below 20EMA (death cross)", "Fixed 5% stop-loss from buy price"],
+    config: { "Universe": "Nifty 200", "Fast EMA": "6", "Slow EMA": "20", "Stop-loss": "5%", "Mode": "PAPER" },
+  },
+  "rsi-momentum": {
+    buy: ["RSI crosses above 50 from below", "Price above 20EMA"],
+    sell: ["RSI drops below 40", "3% trailing stop from highest price"],
+    config: { "Universe": "Nifty 200", "RSI period": "14", "Entry": "RSI > 50", "Exit": "RSI < 40", "Trail": "3%", "Mode": "PAPER" },
+  },
+  "btst": {
+    buy: ["Stock up > 1.5% on the day", "Buy in last 30 min (2:45–3:15 PM)"],
+    sell: ["Sell next day, 15 min after market open (9:30 AM)"],
+    config: { "Universe": "Nifty 200", "Min day gain": "1.5%", "Buy window": "2:45–3:15 PM", "Sell": "Next day 9:30 AM", "Max positions": "3", "Mode": "PAPER" },
+  },
+};
+
 export default function Dashboard() {
   const [tab, setTab] = useState("Positions");
   const [token, setToken] = useState(null);
@@ -673,6 +795,8 @@ export default function Dashboard() {
   const [gainers, setGainers] = useState([]);
   const [gainerMinPct, setGainerMinPct] = useState(1);
   const [gainerLastFetch, setGainerLastFetch] = useState(null);
+  const [expandedJob, setExpandedJob] = useState(null);       // Engine tab
+  const [expandedStrategy, setExpandedStrategy] = useState(null); // Lab tab
 
   // Mobile detection
   useEffect(() => {
@@ -1464,24 +1588,31 @@ export default function Dashboard() {
                         opacity: isPaused ? 0.6 : 1,
                       }}>
                         {/* Card header */}
-                        <div style={{ padding: "12px 16px", background: "var(--bg2)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <div
+                          style={{ padding: "12px 16px", background: "var(--bg2)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}
+                          onClick={() => setExpandedStrategy(expandedStrategy === s.id ? null : s.id)}
+                        >
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
                               {s.name}
                               <Badge type={isLive ? "green" : "blue"}>{isLive ? "LIVE" : "PAPER"}</Badge>
                               {isPaused && <Badge type="yellow">PAUSED</Badge>}
+                              <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: 2 }}>{expandedStrategy === s.id ? "▲" : "▼"}</span>
                             </div>
                             <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{s.description}</div>
                           </div>
                           {/* Toggle pause/active */}
                           <Toggle
                             checked={!isPaused}
-                            onChange={async () => {
+                            onChange={async (e) => {
+                              e.stopPropagation && e.stopPropagation();
                               await fetch(`/api/strategies/${s.id}/toggle`, { method: "POST" });
                               fetchStrategies();
                             }}
                           />
                         </div>
+                        {/* Logic summary */}
+                        {expandedStrategy === s.id && <LogicPanel logic={STRATEGY_LOGIC[s.id]} />}
 
                         {/* Metrics grid */}
                         <div style={{ padding: 16 }}>
@@ -1899,31 +2030,40 @@ export default function Dashboard() {
                     const isAutoOn = job.auto;
                     const lastRun  = state.lastRun ? new Date(state.lastRun).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : null;
                     const statusOk = state.lastStatus === "ok";
+                    const isExpanded = expandedJob === job.key;
                     return (
-                      <div key={job.key} style={{ background: "var(--bg1)", border: `1px solid ${isAutoOn ? "rgba(0,229,153,.25)" : "var(--border)"}`, borderRadius: 10, padding: 16 }}>
-                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
-                          <div>
-                            <div style={{ fontSize: 14, fontWeight: 700 }}>{job.icon} {job.label}</div>
-                            <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 3 }}>{job.desc}</div>
+                      <div key={job.key} style={{ background: "var(--bg1)", border: `1px solid ${isExpanded ? "rgba(124,131,253,.4)" : isAutoOn ? "rgba(0,229,153,.25)" : "var(--border)"}`, borderRadius: 10, overflow: "hidden" }}>
+                        <div
+                          style={{ padding: 16, cursor: "pointer" }}
+                          onClick={() => setExpandedJob(isExpanded ? null : job.key)}
+                        >
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 700 }}>{job.icon} {job.label}
+                                <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: 6 }}>{isExpanded ? "▲" : "▼"}</span>
+                              </div>
+                              <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 3 }}>{job.desc}</div>
+                            </div>
+                            {isAutoOn && (
+                              <Badge type="green">{job.interval}</Badge>
+                            )}
                           </div>
-                          {isAutoOn && (
-                            <Badge type="green">{job.interval}</Badge>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
-                          <div style={{ fontSize: 11, color: "var(--text3)" }}>
-                            {lastRun
-                              ? <span>Last: <span style={{ color: statusOk ? "var(--green)" : "var(--red)", fontFamily: "var(--font-mono)" }}>{lastRun}</span> <Badge type={statusOk ? "green" : "red"}>{state.lastStatus}</Badge></span>
-                              : <span style={{ color: "var(--text3)" }}>Never run</span>
-                            }
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                            <div style={{ fontSize: 11, color: "var(--text3)" }}>
+                              {lastRun
+                                ? <span>Last: <span style={{ color: statusOk ? "var(--green)" : "var(--red)", fontFamily: "var(--font-mono)" }}>{lastRun}</span> <Badge type={statusOk ? "green" : "red"}>{state.lastStatus}</Badge></span>
+                                : <span style={{ color: "var(--text3)" }}>Never run</span>
+                              }
+                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); runJob(job.key, { force: true }); }}
+                              style={{ ...btnStyle("accent"), padding: "5px 12px", fontSize: 12 }}
+                            >
+                              ▶ Run Now
+                            </button>
                           </div>
-                          <button
-                            onClick={() => runJob(job.key, { force: true })}
-                            style={{ ...btnStyle("accent"), padding: "5px 12px", fontSize: 12 }}
-                          >
-                            ▶ Run Now
-                          </button>
                         </div>
+                        {isExpanded && <LogicPanel logic={ENGINE_LOGIC[job.key]} />}
                       </div>
                     );
                   })}
