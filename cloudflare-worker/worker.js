@@ -1,53 +1,41 @@
 /**
  * ATSL Trading Automation — Cloudflare Worker
+ * Secrets accessed via env.TRADING_CRON_SECRET (module worker syntax)
  *
- * Replaces Vercel cron jobs with a proper per-minute scheduler.
- * Runs completely automatically — no dashboard needs to be open.
- *
- * Schedule (set in wrangler.toml):
- *   every 1 minute  →  scheduled() handler fires
- *
- * IST = UTC + 5:30
- * Market hours: Mon–Fri, 09:15–15:30 IST  (03:45–10:00 UTC)
- *
- * Job schedule:
- *   Sell check      every 5 min during market hours (09:15–15:30 IST)
- *   Buy signal scan every 30 min during market hours (09:15–14:45 IST)
- *   ATSL update     at 15:15, 15:18, 15:22, 15:25 IST
- *   Token health    once at 08:30 IST (30 min before market)
+ * Job schedule (IST):
+ *   08:30              → token-health
+ *   09:15–15:30 / 5min → sell-check
+ *   09:15–14:45 / 30min→ buy-signals
+ *   15:15,18,22,25     → atsl-update
+ *   15:35              → eod-summary
  */
 
-const BASE_URL    = "https://stock-webapp-psi.vercel.app";
-const CRON_SECRET = TRADING_CRON_SECRET; // injected from Worker secret
+const BASE_URL = "https://stock-webapp-psi.vercel.app";
 
-// ─── Time helpers (all in IST) ────────────────────────────────────────────────
-
-function toIST(date) {
-  // UTC + 5h30m
-  return new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
-}
+// ─── Time helpers ─────────────────────────────────────────────────────────────
 
 function istNow() {
-  return toIST(new Date());
+  const now = new Date();
+  return new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
 }
 
 function isWeekday(ist) {
-  const day = ist.getUTCDay(); // 0=Sun,6=Sat (UTC day of IST date)
+  const day = ist.getUTCDay();
   return day >= 1 && day <= 5;
 }
 
-function istHHMM(ist) {
+function hhmm(ist) {
   return ist.getUTCHours() * 100 + ist.getUTCMinutes();
 }
 
 // ─── HTTP helper ──────────────────────────────────────────────────────────────
 
-async function callVercel(path, body = {}) {
+async function callVercel(path, secret, body = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method:  "POST",
     headers: {
       "Content-Type":  "application/json",
-      "Authorization": `Bearer ${CRON_SECRET}`,
+      "Authorization": `Bearer ${secret}`,
     },
     body: JSON.stringify(body),
   });
@@ -60,56 +48,56 @@ async function callVercel(path, body = {}) {
 
 export default {
   async scheduled(event, env, ctx) {
-    const ist  = istNow();
-    const hhmm = istHHMM(ist);
-    const min  = ist.getUTCMinutes();
+    const secret = env.TRADING_CRON_SECRET;
+    const ist    = istNow();
+    const time   = hhmm(ist);
+    const min    = ist.getUTCMinutes();
 
-    // Only run on weekdays
     if (!isWeekday(ist)) return;
 
     const jobs = [];
 
-    // Token health — 08:30 IST (before market opens)
-    if (hhmm === 830) {
-      jobs.push(callVercel("/api/trading/token-health"));
-    }
+    // Token health — 08:30 IST
+    if (time === 830)
+      jobs.push(["token-health", callVercel("/api/trading/token-health", secret)]);
 
     // Sell check — every 5 min, 09:15–15:30 IST
-    if (hhmm >= 915 && hhmm <= 1530 && min % 5 === 0) {
-      jobs.push(callVercel("/api/trading/sell-check"));
-    }
+    if (time >= 915 && time <= 1530 && min % 5 === 0)
+      jobs.push(["sell-check", callVercel("/api/trading/sell-check", secret)]);
 
-    // Buy signal scan — every 30 min, 09:15–14:45 IST
-    if (hhmm >= 915 && hhmm <= 1445 && min % 30 === 0) {
-      jobs.push(callVercel("/api/trading/buy-signals"));
-    }
+    // Buy signals — every 30 min, 09:15–14:45 IST
+    if (time >= 915 && time <= 1445 && min % 30 === 0)
+      jobs.push(["buy-signals", callVercel("/api/trading/buy-signals", secret)]);
 
-    // ATSL update — 15:15, 15:18, 15:22, 15:25 IST
-    if ([1515, 1518, 1522, 1525].includes(hhmm)) {
-      jobs.push(callVercel("/api/trading/atsl-update"));
-    }
+    // ATSL update — once at 15:20 IST
+    if (time === 1520)
+      jobs.push(["atsl-update", callVercel("/api/trading/atsl-update", secret)]);
 
     // EOD summary — 15:35 IST
-    if (hhmm === 1535) {
-      jobs.push(callVercel("/api/trading/eod-summary"));
-    }
+    if (time === 1535)
+      jobs.push(["eod-summary", callVercel("/api/trading/eod-summary", secret)]);
 
     if (jobs.length > 0) {
-      const results = await Promise.allSettled(jobs);
-      console.log(`[${ist.toISOString()}] IST ${hhmm} — ran ${jobs.length} job(s)`, results);
+      const results = await Promise.allSettled(jobs.map(([, p]) => p));
+      results.forEach((r, i) => {
+        const name = jobs[i][0];
+        if (r.status === "fulfilled") {
+          console.log(`[${name}] HTTP ${r.value.status}`, JSON.stringify(r.value.data).slice(0, 200));
+        } else {
+          console.error(`[${name}] FAILED`, r.reason);
+        }
+      });
     }
   },
 
-  // Allow manual HTTP trigger for testing: GET /trigger?job=sell-check
+  // Manual trigger: GET /?job=sell-check  with Authorization header
   async fetch(request, env, ctx) {
-    const url    = new URL(request.url);
-    const secret = request.headers.get("Authorization");
-
-    if (secret !== `Bearer ${CRON_SECRET}`) {
+    const secret = env.TRADING_CRON_SECRET;
+    if (request.headers.get("Authorization") !== `Bearer ${secret}`) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const job = url.searchParams.get("job");
+    const job = new URL(request.url).searchParams.get("job");
     const pathMap = {
       "sell-check":   "/api/trading/sell-check",
       "buy-signals":  "/api/trading/buy-signals",
@@ -119,10 +107,10 @@ export default {
     };
 
     if (!job || !pathMap[job]) {
-      return Response.json({ error: "Unknown job. Use ?job=sell-check|buy-signals|atsl-update|eod-summary|token-health" }, { status: 400 });
+      return Response.json({ error: "Use ?job=sell-check|buy-signals|atsl-update|eod-summary|token-health" }, { status: 400 });
     }
 
-    const result = await callVercel(pathMap[job]);
+    const result = await callVercel(pathMap[job], secret);
     return Response.json({ job, ...result });
   },
 };
