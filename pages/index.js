@@ -1918,9 +1918,8 @@ export default function Dashboard() {
                             }
                           </div>
                           <button
-                            onClick={() => runJob(job.key)}
-                            disabled={!isOpen && job.key !== "eod-summary" && job.key !== "token-health"}
-                            style={{ ...btnStyle(isOpen || job.key === "eod-summary" || job.key === "token-health" ? "accent" : "default"), padding: "5px 12px", fontSize: 12 }}
+                            onClick={() => runJob(job.key, { force: true })}
+                            style={{ ...btnStyle("accent"), padding: "5px 12px", fontSize: 12 }}
                           >
                             ▶ Run Now
                           </button>

@@ -3,7 +3,7 @@
 import { getCronState } from "../../../lib/kv";
 import { isMarketOpen, nowIST, isTradingDay } from "../../../lib/market";
 
-const JOBS = ["sell-tracker", "buy-signals", "cash-atsl", "eod-summary", "token-health", "paper-trading"];
+const JOBS = ["sell-check", "buy-signals", "atsl-update", "eod-summary", "token-health", "paper-trading"];
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
