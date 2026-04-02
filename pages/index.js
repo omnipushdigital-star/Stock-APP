@@ -2056,7 +2056,7 @@ export default function Dashboard() {
                               }
                             </div>
                             <button
-                              onClick={(e) => { e.stopPropagation(); runJob(job.key, { force: true }); }}
+                              onClick={(e) => { e.stopPropagation(); runJob(job.key); }}
                               style={{ ...btnStyle("accent"), padding: "5px 12px", fontSize: 12 }}
                             >
                               ▶ Run Now
