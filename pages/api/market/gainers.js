@@ -1,9 +1,11 @@
-// GET /api/market/gainers?minPct=1&universe=nifty200
+// GET /api/market/gainers?minPct=1
 // Fetches all Nifty 200 stocks in ONE getOHLC call, returns those up > minPct% today.
+// Uses hardcoded symbol list (falls back from R2 JSON if unavailable).
 // Sorted by changePct descending.
 
 import { getKite } from "../../../lib/kite";
 import { getJSON } from "../../../lib/r2";
+import { NIFTY200_SYMBOLS } from "../../../lib/nifty200";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
@@ -14,14 +16,20 @@ export default async function handler(req, res) {
   try {
     const kite = await getKite();
 
-    // Load Nifty 200 symbol list from R2
-    const nifty200 = await getJSON("EQUITY_L_NIFTY200_symbols.json").catch(() => null) || [];
-    if (!nifty200.length) return res.status(503).json({ ok: false, error: "Nifty 200 list not available" });
+    // Try R2 first, fall back to hardcoded list
+    let symbolList = null;
+    try {
+      const r2List = await getJSON("EQUITY_L_NIFTY200_symbols.json");
+      if (Array.isArray(r2List) && r2List.length > 0) {
+        symbolList = r2List.map((s) => s.replace(".NS", "").trim().toUpperCase());
+      }
+    } catch {}
+    if (!symbolList) symbolList = NIFTY200_SYMBOLS;
 
-    // Build NSE: keys (strip .NS suffix)
-    const keys = nifty200.map((s) => `NSE:${s.replace(".NS", "").trim().toUpperCase()}`);
+    // Build NSE: keys — all in one batch
+    const keys = symbolList.map((s) => `NSE:${s}`);
 
-    // Single batched getOHLC call — all 200 symbols at once
+    // Single batched getOHLC call — all symbols at once
     const data = await kite.getOHLC(keys);
 
     const gainers = [];
@@ -45,10 +53,16 @@ export default async function handler(req, res) {
       });
     }
 
-    // Sort best gainers first
     gainers.sort((a, b) => b.changePct - a.changePct);
 
-    res.json({ ok: true, count: gainers.length, minPct, gainers, ts: new Date().toISOString() });
+    res.json({
+      ok: true,
+      count: gainers.length,
+      minPct,
+      universe: symbolList.length,
+      gainers,
+      ts: new Date().toISOString(),
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

@@ -795,6 +795,8 @@ export default function Dashboard() {
   const [gainers, setGainers] = useState([]);
   const [gainerMinPct, setGainerMinPct] = useState(1);
   const [gainerLastFetch, setGainerLastFetch] = useState(null);
+  const [gainerError, setGainerError] = useState(null);
+  const [gainerUniverse, setGainerUniverse] = useState(null);
   const [expandedJob, setExpandedJob] = useState(null);       // Engine tab
   const [expandedStrategy, setExpandedStrategy] = useState(null); // Lab tab
 
@@ -1038,10 +1040,19 @@ export default function Dashboard() {
 
   const fetchGainers = useCallback(async (pct) => {
     setLoad("gainers", true);
+    setGainerError(null);
     try {
       const d = await (await fetch(`/api/market/gainers?minPct=${pct}`)).json();
-      if (d.ok) { setGainers(d.gainers || []); setGainerLastFetch(new Date()); }
-    } catch {}
+      if (d.ok) {
+        setGainers(d.gainers || []);
+        setGainerLastFetch(new Date());
+        setGainerUniverse(d.universe || null);
+      } else {
+        setGainerError(d.error || "Failed to fetch gainers");
+      }
+    } catch (e) {
+      setGainerError(e.message);
+    }
     setLoad("gainers", false);
   }, []);
 
@@ -2160,16 +2171,21 @@ export default function Dashboard() {
                   )}
                 </div>
               }>
-                {loading.gainers && gainers.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: 32, color: "var(--text3)" }}>Scanning Nifty 200…</div>
+                {gainerError ? (
+                  <div style={{ padding: "12px 16px", background: "rgba(255,71,87,.08)", border: "1px solid rgba(255,71,87,.25)", borderRadius: 8, color: "var(--red)", fontSize: 13 }}>
+                    ❌ {gainerError}
+                  </div>
+                ) : loading.gainers && gainers.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: 32, color: "var(--text3)" }}>Scanning {gainerUniverse ?? "Nifty 200"} symbols…</div>
                 ) : gainers.length === 0 ? (
                   <div style={{ textAlign: "center", padding: 32, color: "var(--text3)" }}>
-                    No stocks up ≥{gainerMinPct}% in Nifty 200 right now.
+                    No stocks up ≥{gainerMinPct}% across {gainerUniverse ?? "—"} symbols scanned.
                   </div>
                 ) : (
                   <>
                     <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10 }}>
                       <strong style={{ color: "var(--text)" }}>{gainers.length}</strong> stocks up ≥{gainerMinPct}% today
+                      {gainerUniverse && <span> · scanned {gainerUniverse} symbols</span>}
                     </div>
                     <div style={{ overflowX: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
