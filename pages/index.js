@@ -636,7 +636,7 @@ const btnStyle = (type) => ({
 });
 
 // ─── Main Dashboard ──────────────────────────────────────────
-const TABS = ["Positions", "ATSL Tracker", "P&L", "Signals", "History", "Lab", "Orders", "Engine", "Crons", "Telegram"];
+const TABS = ["Positions", "ATSL Tracker", "P&L", "Signals", "History", "Lab", "Orders", "Engine", "Crons", "Telegram", "Screener"];
 
 export default function Dashboard() {
   const [tab, setTab] = useState("Positions");
@@ -670,6 +670,9 @@ export default function Dashboard() {
   const [indices, setIndices] = useState([]);
   const [livePrices, setLivePrices] = useState({}); // { SYMBOL: { ltp, change, changePct } }
   const liveTickerRef = useRef(null); // holds the 1s interval id
+  const [gainers, setGainers] = useState([]);
+  const [gainerMinPct, setGainerMinPct] = useState(1);
+  const [gainerLastFetch, setGainerLastFetch] = useState(null);
 
   // Mobile detection
   useEffect(() => {
@@ -909,6 +912,15 @@ export default function Dashboard() {
     setTimeout(() => fetchWallet(),           4500); // +4.5s: margins (1 Kite call)
   }, []);
 
+  const fetchGainers = useCallback(async (pct) => {
+    setLoad("gainers", true);
+    try {
+      const d = await (await fetch(`/api/market/gainers?minPct=${pct}`)).json();
+      if (d.ok) { setGainers(d.gainers || []); setGainerLastFetch(new Date()); }
+    } catch {}
+    setLoad("gainers", false);
+  }, []);
+
   useEffect(() => { if (tab === "History" || tab === "P&L") fetchTrades(); }, [tab]);
   useEffect(() => { if (tab === "Crons") fetchCrons(); }, [tab]);
   useEffect(() => { if (tab === "Telegram") fetchTelegramLog(); }, [tab]);
@@ -916,6 +928,7 @@ export default function Dashboard() {
   useEffect(() => { if (tab === "Orders") { fetchOrders(); fetchKiteOrders(); } }, [tab]);
   useEffect(() => { if (tab === "Positions") fetchZerodhaPortfolio(); }, [tab]);
   useEffect(() => { if (tab === "Engine") fetchEngineStatus(); }, [tab]);
+  useEffect(() => { if (tab === "Screener") fetchGainers(gainerMinPct); }, [tab, gainerMinPct]);
 
   // Structure refresh (holdings list, qty, avg prices) — slow, separate from live prices
   // LTP is handled by the 1s live-prices ticker above
@@ -1057,7 +1070,7 @@ export default function Dashboard() {
               }}>
                 <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, letterSpacing: "0.03em" }}>{idx.label}</span>
                 <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text)" }}>
-                  {idx.ltp != null ? idx.ltp.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "—"}
+                  {idx.ltp != null ? idx.ltp.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
                 </span>
                 {idx.changePct != null && (
                   <span style={{
@@ -1116,6 +1129,7 @@ export default function Dashboard() {
                 {t === "Engine" && "⚙️"}
                 {t === "Crons" && "⏱"}
                 {t === "Telegram" && "📨"}
+                {t === "Screener" && "📊"}
                 {t}
               </button>
             ))}
@@ -1980,6 +1994,86 @@ export default function Dashboard() {
                 </button>
               }>
                 <TelegramLog messages={telegramLog} loading={loading.telegram} />
+              </Card>
+            </div>
+          )}
+
+          {/* ── SCREENER ── */}
+          {tab === "Screener" && (
+            <div style={{ animation: "fadeIn 0.25s ease" }}>
+              <Card title="Intraday Gainers — Nifty 200" action={
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {[1, 2, 3, 5].map((v) => (
+                    <button key={v} onClick={() => setGainerMinPct(v)} style={{
+                      ...btnStyle(gainerMinPct === v ? "primary" : "default"),
+                      padding: "3px 10px", fontSize: 11,
+                    }}>
+                      ≥{v}%
+                    </button>
+                  ))}
+                  <button onClick={() => fetchGainers(gainerMinPct)} disabled={loading.gainers} style={{ ...btnStyle("default"), padding: "3px 10px", fontSize: 11 }}>
+                    {loading.gainers ? <Spinner /> : "↻ Refresh"}
+                  </button>
+                  {gainerLastFetch && (
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                      {gainerLastFetch.toLocaleTimeString("en-IN")}
+                    </span>
+                  )}
+                </div>
+              }>
+                {loading.gainers && gainers.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: 32, color: "var(--text3)" }}>Scanning Nifty 200…</div>
+                ) : gainers.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: 32, color: "var(--text3)" }}>
+                    No stocks up ≥{gainerMinPct}% in Nifty 200 right now.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10 }}>
+                      <strong style={{ color: "var(--text)" }}>{gainers.length}</strong> stocks up ≥{gainerMinPct}% today
+                    </div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text3)" }}>
+                            <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600 }}>#</th>
+                            <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600 }}>Symbol</th>
+                            <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600 }}>CMP</th>
+                            <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600 }}>Prev Close</th>
+                            <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600 }}>Change</th>
+                            <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600 }}>Gain %</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {gainers.map((g, i) => (
+                            <tr key={g.symbol} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,.02)" }}>
+                              <td style={{ padding: "8px 10px", color: "var(--text3)", fontSize: 11 }}>{i + 1}</td>
+                              <td style={{ padding: "8px 10px", fontWeight: 700, color: "var(--text)", fontFamily: "var(--font-mono)", letterSpacing: "0.02em" }}>{g.symbol}</td>
+                              <td style={{ padding: "8px 10px", textAlign: "right", color: "var(--green)", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+                                ₹{g.ltp.toFixed(2)}
+                              </td>
+                              <td style={{ padding: "8px 10px", textAlign: "right", color: "var(--text2)", fontFamily: "var(--font-mono)" }}>
+                                ₹{g.prevClose.toFixed(2)}
+                              </td>
+                              <td style={{ padding: "8px 10px", textAlign: "right", color: "var(--green)", fontFamily: "var(--font-mono)" }}>
+                                +₹{g.change.toFixed(2)}
+                              </td>
+                              <td style={{ padding: "8px 10px", textAlign: "right" }}>
+                                <span style={{
+                                  background: g.changePct >= 3 ? "rgba(0,200,83,.2)" : "rgba(0,229,153,.12)",
+                                  color: "var(--green)", borderRadius: 4,
+                                  padding: "2px 8px", fontSize: 12, fontWeight: 700,
+                                }}>
+                                  +{g.changePct.toFixed(2)}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </Card>
             </div>
           )}
