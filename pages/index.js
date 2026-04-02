@@ -739,7 +739,7 @@ const STRATEGY_LOGIC = {
     config: { "Universe": "Nifty 200", "EMA": "6-period", "Capital": "₹10L (virtual)", "Max positions": "10", "Mode": "PAPER — no real orders" },
   },
   "ema-above": {
-    buy: ["Prev day close > 6EMA  (confirmed uptrend)", "Today close > 6EMA  (trend continues)", "Today close > prev close  (positive day)", "CMP > 6EMA  (live confirmation)", "NIFTY 50 > its own 6EMA  (market filter)"],
+    buy: ["CMP > 6EMA  (only condition)"],
     sell: ["EMA Breakdown: CMP drops below 6EMA", "Adaptive TSL (4 tiers: 0.5%/0.4%/0.3%/0.2%), activates at 1% profit", "Max hold: 10 days"],
     config: { "Universe": "Nifty 200", "EMA": "6-period", "Capital": "₹10L (virtual)", "Max positions": "10", "Mode": "PAPER" },
   },
