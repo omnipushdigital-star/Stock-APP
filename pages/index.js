@@ -799,6 +799,7 @@ export default function Dashboard() {
   const [gainerUniverse, setGainerUniverse] = useState(null);
   const [expandedJob, setExpandedJob] = useState(null);       // Engine tab
   const [expandedStrategy, setExpandedStrategy] = useState(null); // Lab tab
+  const [runResult, setRunResult] = useState(null); // { id, result, error, ts }
 
   // Mobile detection
   useEffect(() => {
@@ -1738,25 +1739,24 @@ export default function Dashboard() {
                             <button
                               onClick={async () => {
                                 setLoad(`run_${s.id}`, true);
+                                setRunResult(null);
                                 try {
                                   const r = await fetch(`/api/strategies/${s.id}/run`, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ forceBuy: true, forceSell: true }),
                                   });
-                                  const d = await r.json();
-                                  const msg = d.error
-                                    ? `❌ ${d.error}`
-                                    : d.result?.skipped
-                                    ? `⏭ Skipped: ${d.result.reason}`
-                                    : d.result?.buys?.length || d.result?.sells?.length
-                                    ? `✅ Buys: ${d.result.buys?.length || 0}, Sells: ${d.result.sells?.length || 0}`
-                                    : `✅ Ran — no signals`;
-                                  alert(msg);
+                                  const text = await r.text();
+                                  let d;
+                                  try { d = JSON.parse(text); } catch {
+                                    setRunResult({ id: s.id, error: `Server error (${r.status}): ${text.slice(0, 120)}`, ts: new Date() });
+                                    return;
+                                  }
+                                  setRunResult({ id: s.id, result: d.result, error: d.error, ts: new Date() });
                                   fetchStrategies();
                                   fetchLabTrades(s.id);
                                 } catch(e) {
-                                  alert(`❌ ${e.message}`);
+                                  setRunResult({ id: s.id, error: e.message, ts: new Date() });
                                 } finally {
                                   setLoad(`run_${s.id}`, false);
                                 }
@@ -1802,6 +1802,45 @@ export default function Dashboard() {
                               </button>
                             )}
                           </div>
+
+                          {/* Run Now result panel */}
+                          {runResult && runResult.id === s.id && (
+                            <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: "var(--bg)", border: `1px solid ${runResult.error ? "var(--red)" : "var(--border)"}`, fontSize: 11 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                                <span style={{ fontWeight: 600, color: runResult.error ? "var(--red)" : "var(--green)" }}>
+                                  {runResult.error ? "Run Failed" : runResult.result?.skipped ? "Skipped" : "Run Complete"}
+                                </span>
+                                <span style={{ color: "var(--text3)", fontSize: 10 }}>{runResult.ts?.toLocaleTimeString("en-IN")}</span>
+                              </div>
+                              {runResult.error && <div style={{ color: "var(--red)" }}>{runResult.error}</div>}
+                              {!runResult.error && runResult.result?.skipped && <div style={{ color: "var(--yellow)" }}>Skipped: {runResult.result.reason}</div>}
+                              {!runResult.error && !runResult.result?.skipped && (() => {
+                                const actions = runResult.result?.actions || [];
+                                const buys  = actions.filter(a => a.type === "BUY");
+                                const sells = actions.filter(a => a.type === "SELL");
+                                return (
+                                  <div>
+                                    <div style={{ color: "var(--text2)", marginBottom: 4 }}>
+                                      Buys: <b style={{ color: buys.length ? "var(--green)" : "var(--text3)" }}>{buys.length}</b>
+                                      {"  "}Sells: <b style={{ color: sells.length ? "var(--red)" : "var(--text3)" }}>{sells.length}</b>
+                                      {"  "}Open: <b style={{ color: "var(--text)" }}>{runResult.result?.openPositions ?? "—"}</b>
+                                    </div>
+                                    {buys.length > 0 && (
+                                      <div style={{ marginBottom: 4 }}>
+                                        {buys.map((a, i) => <div key={i} style={{ color: "var(--green)" }}>▲ {a.sym} @ ₹{a.cmp} × {a.qty} (6EMA ₹{a.ema6})</div>)}
+                                      </div>
+                                    )}
+                                    {sells.length > 0 && (
+                                      <div>
+                                        {sells.map((a, i) => <div key={i} style={{ color: "var(--red)" }}>▼ {a.sym} @ ₹{a.cmp} — {a.reason} (P&L {a.pnlPct}%)</div>)}
+                                      </div>
+                                    )}
+                                    {buys.length === 0 && sells.length === 0 && <div style={{ color: "var(--text3)" }}>No signals — no stocks met conditions</div>}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
 
                           {/* Per-strategy trade log (lazy loaded) */}
                           {labTrades[s.id] && (
