@@ -1835,7 +1835,20 @@ export default function Dashboard() {
                                         {sells.map((a, i) => <div key={i} style={{ color: "var(--red)" }}>▼ {a.sym} @ ₹{a.cmp} — {a.reason} (P&L {a.pnlPct}%)</div>)}
                                       </div>
                                     )}
-                                    {buys.length === 0 && sells.length === 0 && <div style={{ color: "var(--text3)" }}>No signals — no stocks met conditions</div>}
+                                    {buys.length === 0 && sells.length === 0 && (
+                                      <div>
+                                        <div style={{ color: "var(--text3)" }}>No signals — no stocks met conditions</div>
+                                        {runResult.result?.diag && (() => {
+                                          const d = runResult.result.diag;
+                                          return (
+                                            <div style={{ color: "var(--text3)", fontSize: 10, marginTop: 4 }}>
+                                              Scanned: {d.scanned} | LTP ok: {d.ltpFetched} | No LTP: {d.noLtp} | No closes: {d.noCloses} | Below EMA: {d.belowEma}
+                                              {d.ltpError && <div style={{ color: "var(--red)" }}>LTP error: {d.ltpError}</div>}
+                                            </div>
+                                          );
+                                        })()}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })()}
