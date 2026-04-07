@@ -1844,6 +1844,7 @@ export default function Dashboard() {
                                             <div style={{ color: "var(--text3)", fontSize: 10, marginTop: 4 }}>
                                               Scanned: {d.scanned} | LTP ok: {d.ltpFetched} | No LTP: {d.noLtp} | No closes: {d.noCloses} | Below EMA: {d.belowEma}
                                               {d.ltpError && <div style={{ color: "var(--red)" }}>LTP error: {d.ltpError}</div>}
+                                              {d.closesError && <div style={{ color: "var(--red)" }}>Closes error: {d.closesError}</div>}
                                             </div>
                                           );
                                         })()}
