@@ -734,7 +734,7 @@ const STRATEGY_LOGIC = {
     config: { "Universe": "Nifty 200", "EMA": "6-period", "Capital": "₹1L", "Max positions": "10", "Mode": "LIVE — real orders" },
   },
   "cash-atsl-paper": {
-    buy: ["C1: prev open < 6EMA", "C2: prev close < 6EMA", "C3: CMP > 6EMA × 1.002", "NIFTY 50 > its 6EMA (market filter)", "Buy window: 3:15–3:25 PM IST"],
+    buy: ["C1: prev open < 6EMA", "C2: prev close < 6EMA", "C3: CMP > 6EMA × 1.002"],
     sell: ["Adaptive TSL (4 tiers: 0.5%/0.4%/0.3%/0.2%), activates at 1% profit", "Max hold: 7 days", "CMP < 6EMA after 3:15 PM"],
     config: { "Universe": "Nifty 200", "EMA": "6-period", "Capital": "₹10L (virtual)", "Max positions": "10", "Mode": "PAPER — no real orders" },
   },
