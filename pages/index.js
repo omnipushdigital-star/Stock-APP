@@ -445,14 +445,36 @@ function ATSLTracker({ positions, loading }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {positions.map((p, i) => {
-        const buyPrice = parseFloat(p["Buy Price"] || p.buyPrice || 0);
-        const cmp = parseFloat(p.cmp || 0);
-        const atslPct = 0.07; // 7% trailing stop loss
-        const atslLevel = buyPrice * (1 - atslPct);
-        const highPrice = parseFloat(p["High Price"] || cmp || buyPrice);
-        const trailingATSL = highPrice * (1 - atslPct);
-        const effectiveATSL = Math.max(atslLevel, trailingATSL);
-        const pnlPct = cmp && buyPrice ? ((cmp - buyPrice) / buyPrice * 100) : null;
+        const buyPrice  = parseFloat(p["Buy Price"] || p.buyPrice || 0);
+        const cmp       = parseFloat(p.cmp || 0);
+        const highPrice = parseFloat(p["Highest Price"] || p["High Price"] || cmp || buyPrice);
+        const pnlPct    = cmp && buyPrice ? ((cmp - buyPrice) / buyPrice * 100) : null;
+
+        // Adaptive TSL — mirrors tslBuffer() in cash-atsl.js
+        const tslActivated = p["TSL_Activated"] === true || p["TSL_Activated"] === "TRUE";
+        function adaptiveBuf(pct) {
+          if (pct < 2)  return 0.005;
+          if (pct < 5)  return 0.004;
+          if (pct < 10) return 0.003;
+          return 0.002;
+        }
+        let effectiveATSL;
+        if (tslActivated) {
+          const stored = parseFloat(p["Stop_Loss_Price"] || 0);
+          if (stored > 0) {
+            effectiveATSL = stored;
+          } else {
+            // Recompute from highPrice if stored value missing
+            const buf     = adaptiveBuf(pnlPct || 0);
+            const tslPrice = highPrice * (1 - buf);
+            const minStop  = buyPrice * 1.01;
+            effectiveATSL  = Math.max(tslPrice, minStop);
+          }
+        } else {
+          // TSL not yet activated — show activation threshold (buy × (1 - buf at 0% profit))
+          effectiveATSL = buyPrice * (1 - adaptiveBuf(0)); // 0.5% below buy price
+        }
+
         const distToATSL = cmp ? ((cmp - effectiveATSL) / cmp * 100) : null;
         const atRisk = distToATSL !== null && distToATSL < 3;
         const sym = (p["Symbol"] || p.symbol || "—").replace(".NS", "");
@@ -468,7 +490,11 @@ function ATSLTracker({ positions, loading }) {
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                   <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 18, color: "var(--text)" }}>{sym}</span>
-                  {atRisk && <span style={{ background: "var(--red-dim)", color: "var(--red)", border: "1px solid rgba(255,77,106,0.3)", borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>⚠ NEAR ATSL</span>}
+                  {tslActivated
+                    ? <span style={{ background: "rgba(255,185,0,0.12)", color: "var(--yellow)", border: "1px solid rgba(255,185,0,0.3)", borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>TSL ACTIVE</span>
+                    : <span style={{ background: "var(--bg2)", color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: 11 }}>TSL PENDING</span>
+                  }
+                  {atRisk && <span style={{ background: "var(--red-dim)", color: "var(--red)", border: "1px solid rgba(255,77,106,0.3)", borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>NEAR ATSL</span>}
                 </div>
                 <span style={{ fontSize: 11, color: "var(--text3)" }}>
                   Buy: {p["Buy Date"] || "—"} · Reason: {p["Reason"] || "ATSL"}
