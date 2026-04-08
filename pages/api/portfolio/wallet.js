@@ -8,6 +8,7 @@ import { resetWallet, setStartingCapital, getWallet } from "../../../lib/paper-w
 import { getAllStrategies } from "../../../lib/strategies/index";
 import { getPaperPositions } from "../../../lib/paper-trading";
 import { getWalletView } from "../../../lib/paper-wallet";
+import { putExcel } from "../../../lib/r2";
 
 export default async function handler(req, res) {
   // ── GET — fetch Zerodha funds + all paper wallets ──────────────────────────
@@ -83,6 +84,9 @@ export default async function handler(req, res) {
       if (action === "reset") {
         const cap    = capital ? parseFloat(capital) : undefined;
         const wallet = await resetWallet(strategyId, cap);
+        // Clear open positions and trade history from R2
+        await putExcel(`paper_positions_${strategyId}.xlsx`, []);
+        await putExcel(`paper_trades_${strategyId}.xlsx`, []);
         return res.json({ ok: true, action: "reset", wallet });
       }
 
