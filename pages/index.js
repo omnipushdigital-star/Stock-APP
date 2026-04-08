@@ -1838,7 +1838,11 @@ export default function Dashboard() {
                                     )}
                                     {buys.length === 0 && sells.length === 0 && (
                                       <div>
-                                        <div style={{ color: "var(--text3)" }}>No signals — no stocks met conditions</div>
+                                        <div style={{ color: "var(--text3)" }}>
+                                          {runResult.result?.skippedBuys === "max positions reached"
+                                            ? `Max positions reached (${runResult.result.openPositions}/${runResult.result.openPositions}) — reset wallet to clear old positions`
+                                            : "No signals — no stocks met conditions"}
+                                        </div>
                                         {runResult.result?.diag && (() => {
                                           const d = runResult.result.diag;
                                           return (
