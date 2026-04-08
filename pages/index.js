@@ -1755,6 +1755,7 @@ export default function Dashboard() {
                                   setRunResult({ id: s.id, result: d.result, error: d.error, ts: new Date() });
                                   fetchStrategies();
                                   fetchLabTrades(s.id);
+                                  fetchWallet();
                                 } catch(e) {
                                   setRunResult({ id: s.id, error: e.message, ts: new Date() });
                                 } finally {
