@@ -1837,24 +1837,59 @@ export default function Dashboard() {
                                       </div>
                                     )}
                                     {buys.length === 0 && sells.length === 0 && (
-                                      <div>
-                                        <div style={{ color: "var(--text3)" }}>
-                                          {runResult.result?.skippedBuys === "max positions reached"
-                                            ? `Max positions reached (${runResult.result.openPositions}/${runResult.result.openPositions}) — reset wallet to clear old positions`
-                                            : "No signals — no stocks met conditions"}
-                                        </div>
-                                        {runResult.result?.diag && (() => {
-                                          const d = runResult.result.diag;
-                                          return (
-                                            <div style={{ color: "var(--text3)", fontSize: 10, marginTop: 4 }}>
-                                              Scanned: {d.scanned} | LTP ok: {d.ltpFetched} | No LTP: {d.noLtp} | No closes: {d.noCloses} | Below EMA: {d.belowEma}
-                                              {d.ltpError && <div style={{ color: "var(--red)" }}>LTP error: {d.ltpError}</div>}
-                                              {d.closesError && <div style={{ color: "var(--red)" }}>Closes error: {d.closesError}</div>}
-                                            </div>
-                                          );
-                                        })()}
+                                      <div style={{ color: "var(--text3)" }}>
+                                        {runResult.result?.skippedBuys === "max positions reached"
+                                          ? `Max positions reached (${runResult.result.openPositions}/${runResult.result.openPositions}) — reset wallet to clear old positions`
+                                          : "No signals — no stocks met conditions"}
                                       </div>
                                     )}
+                                    {/* Filter breakdown — shown whenever filterLog exists */}
+                                    {runResult.result?.filterLog && (() => {
+                                      const f = runResult.result.filterLog;
+                                      const rows = [
+                                        { label: "Bought", items: f.bought, color: "var(--green)" },
+                                        { label: "Failed C3 (CMP ≤ 6EMA×1.002)", items: f.failC3, color: "var(--yellow)" },
+                                        { label: "Failed C2 (prev close ≥ 6EMA)", items: f.failC2, color: "var(--yellow)" },
+                                        { label: "Failed C1 (prev open ≥ 6EMA)", items: f.failC1, color: "var(--yellow)" },
+                                        { label: "No data / EMA", items: f.noData, color: "var(--text3)" },
+                                        { label: "No token", items: f.noToken, color: "var(--text3)" },
+                                      ].filter(r => r.items?.length > 0);
+                                      return (
+                                        <div style={{ marginTop: 8, fontSize: 10 }}>
+                                          <div style={{ fontWeight: 600, color: "var(--text2)", marginBottom: 4, fontSize: 11 }}>Filter Breakdown</div>
+                                          {rows.map((r, i) => (
+                                            <div key={i} style={{ marginBottom: 4 }}>
+                                              <div style={{ color: r.color, fontWeight: 600 }}>{r.label} ({r.items.length})</div>
+                                              <div style={{ color: "var(--text3)", lineHeight: 1.6 }}>
+                                                {r.items.map((item, j) => {
+                                                  if (typeof item === "string") return <span key={j} style={{ marginRight: 6 }}>{item}</span>;
+                                                  if (item.sym) {
+                                                    const detail = item.prevOpen
+                                                      ? `open ₹${item.prevOpen} vs EMA ₹${item.ema6}`
+                                                      : item.prevClose
+                                                      ? `close ₹${item.prevClose} vs EMA ₹${item.ema6}`
+                                                      : `CMP ₹${item.cmp} vs EMA×1.002 ₹${(parseFloat(item.ema6)*1.002).toFixed(2)}`;
+                                                    return <span key={j} style={{ marginRight: 8 }}>{item.sym} <span style={{ color: "var(--text3)" }}>({detail})</span></span>;
+                                                  }
+                                                  return null;
+                                                })}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      );
+                                    })()}
+                                    {/* ema-above diag (kept for that strategy) */}
+                                    {runResult.result?.diag && (() => {
+                                      const d = runResult.result.diag;
+                                      return (
+                                        <div style={{ color: "var(--text3)", fontSize: 10, marginTop: 4 }}>
+                                          Scanned: {d.scanned} | LTP ok: {d.ltpFetched} | No LTP: {d.noLtp} | No closes: {d.noCloses} | Below EMA: {d.belowEma}
+                                          {d.ltpError && <div style={{ color: "var(--red)" }}>LTP error: {d.ltpError}</div>}
+                                          {d.closesError && <div style={{ color: "var(--red)" }}>Closes error: {d.closesError}</div>}
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 );
                               })()}
